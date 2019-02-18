@@ -15,8 +15,9 @@ describe('Direct client', function () {
 		return testRequest(https, {
 			hostname: 'test-https-server',
 			path: '/test-path',
-			agent: new (<any>vpa).ProxyAgent({
-				resolveProxy: (req: ClientRequest, opts: RequestOptions, url: string, cb: (res: string) => void) => cb('DIRECT')
+			agent: new vpa.ProxyAgent({
+				resolveProxy: (req: ClientRequest, opts: RequestOptions, url: string, cb: (res: string) => void) => cb('DIRECT'),
+				defaultPort: 443
 			}),
 			ca,
 		});

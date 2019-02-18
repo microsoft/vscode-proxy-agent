@@ -9,7 +9,8 @@ describe('Proxied client', function () {
 			hostname: 'test-https-server',
 			path: '/test-path',
 			agent: new vpa.ProxyAgent({
-				resolveProxy: (req: ClientRequest, opts: RequestOptions, url: string, cb: (res: string) => void) => cb('PROXY test-http-proxy:3128')
+				resolveProxy: (req: ClientRequest, opts: RequestOptions, url: string, cb: (res: string) => void) => cb('PROXY test-http-proxy:3128'),
+				defaultPort: 443
 			}),
 			ca,
 		});

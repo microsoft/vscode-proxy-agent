@@ -34,6 +34,7 @@ function ProxyAgent(session) {
 
   this.session = session;
   this.addRequest = addRequest;
+  this.defaultPort = session.defaultPort;
 }
 
 /**
@@ -89,7 +90,7 @@ function addRequest (req, opts) {
 
     if ('DIRECT' == type) {
       // direct connection to the destination endpoint
-      agent = defaultAgent;
+      agent = this.session.originalAgent || defaultAgent;
     } else if ('SOCKS' == type) {
       // use a SOCKS proxy
       agent = new SocksProxyAgent('socks://' + parts[1]);
@@ -105,7 +106,7 @@ function addRequest (req, opts) {
       }
     } else {
       // direct connection to the destination endpoint
-      agent = defaultAgent;
+      agent = this.session.originalAgent || defaultAgent;
     }
     agent.addRequest(req, opts);
   }
