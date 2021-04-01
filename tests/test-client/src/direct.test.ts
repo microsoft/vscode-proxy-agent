@@ -83,8 +83,8 @@ describe('Direct client', function () {
 		useHostProxy: true,
 		env: {},
 	};
-	it('should override original agent', async function () {
-		// https://github.com/microsoft/vscode/issues/117054
+	it('should use original agent', async function () {
+		// https://github.com/microsoft/vscode/issues/120354 (superseding https://github.com/microsoft/vscode/issues/117054)
 		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
@@ -95,6 +95,7 @@ describe('Direct client', function () {
 			hostname: 'test-https-server',
 			path: '/test-path',
 			agent: {
+				defaultPort: 443, // This is required to support request options without port/defaultPort.
 				addRequest: (req: any, opts: any) => {
 					seen = true;
 					(<any>https.globalAgent).addRequest(req, opts);
@@ -102,7 +103,7 @@ describe('Direct client', function () {
 			} as any,
 			ca,
 		});
-		assert.ok(!seen, 'Original agent called!');
+		assert.ok(seen, 'Original agent not called!');
 	});
 	it('should use original agent', async function () {
 		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);

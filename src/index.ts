@@ -324,7 +324,7 @@ export function createHttpPatch(originals: typeof http | typeof https, resolvePr
 				options.agent = new ProxyAgent({
 					resolveProxy: resolveProxy.bind(undefined, { useProxySettings, useSystemCertificates }),
 					defaultPort: isHttps ? 443 : 80,
-					originalAgent: !useProxySettings ? originalAgent : undefined,
+					originalAgent,
 				});
 				return original(options, callback);
 			}

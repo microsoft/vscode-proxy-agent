@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.8.2]
+- Do not override original agent (fixes [microsoft/vscode#120354](https://github.com/microsoft/vscode/issues/120354))
+
 ## [0.8.0]
 - Align log level constants with VS Code.
 
