@@ -31,5 +31,6 @@ extends:
             displayName: Install dependencies
           - script: npm run compile
             displayName: Compile
-
+        
+        testPlatforms: {}
         publishPackage: ${{ parameters.publishPackage }}
