@@ -1,0 +1,6 @@
+{
+	"name": "VS Code with Proxy",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "vscode",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}"
+}

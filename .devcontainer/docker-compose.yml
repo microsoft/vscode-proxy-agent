@@ -1,0 +1,45 @@
+version: '3'
+
+services:
+    vscode:
+        build: .
+        privileged: true
+        links:
+            - http-proxy
+            - dns-proxy
+        environment:
+            - HTTP_PROXY=http://http-proxy:3128
+            - HTTPS_PROXY=http://http-proxy:3128
+            - NO_PROXY=127.0.0.1,localhost
+        volumes:
+            - ../..:/workspaces
+        dns:
+            - 172.33.0.10
+        networks:
+            - no-internet-proxy
+            - no-internet-dns
+        command: sleep inf
+    http-proxy:
+        image: minimum2scp/squid:latest
+        networks:
+            - no-internet-proxy
+            - internet
+    dns-proxy:
+        image: defreitas/dns-proxy-server:latest
+        networks:
+            no-internet-dns:
+                ipv4_address: 172.33.0.10
+            internet:
+
+networks:
+    no-internet-proxy:
+        driver: bridge
+        internal: true
+    no-internet-dns:
+        ipam:
+            config:
+                - subnet: 172.33.0.0/16
+        driver: bridge
+        internal: true
+    internet:
+        driver: bridge
