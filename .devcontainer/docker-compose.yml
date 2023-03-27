@@ -1,26 +1,53 @@
-version: '3'
+version: '3.4'
 
 services:
     vscode:
-        build: .
+        build: vscode
+        command:
+            - /bin/sh
+            - -c
+            - |
+                while [ ! -f /home/mitmproxy/.mitmproxy/mitmproxy-ca-cert.pem ]; do sleep 1; done
+                cp /home/mitmproxy/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy-ca-cert.crt
+                update-ca-certificates
+                sleep inf
         privileged: true
         links:
-            - http-proxy
+            - http-proxy-squid
+            - http-proxy-privoxy
+            - http-proxy-mitmproxy
             - dns-proxy
         environment:
-            - HTTP_PROXY=http://http-proxy:3128
-            - HTTPS_PROXY=http://http-proxy:3128
+            # - HTTP_PROXY=http://http-proxy-squid:3128
+            # - HTTPS_PROXY=http://http-proxy-squid:3128
+            # - HTTP_PROXY=http://http-proxy-privoxy:8118
+            # - HTTPS_PROXY=http://http-proxy-privoxy:8118
+            - HTTP_PROXY=http://http-proxy-mitmproxy:8080
+            - HTTPS_PROXY=http://http-proxy-mitmproxy:8080
             - NO_PROXY=127.0.0.1,localhost
         volumes:
+            - mitmproxy-ca:/home/mitmproxy/.mitmproxy
             - ../..:/workspaces
         dns:
             - 172.33.0.10
         networks:
             - no-internet-proxy
             - no-internet-dns
-        command: sleep inf
-    http-proxy:
+    http-proxy-squid:
         image: minimum2scp/squid:latest
+        networks:
+            - no-internet-proxy
+            - internet
+    http-proxy-privoxy:
+        build: http-proxy-privoxy
+        networks:
+            - no-internet-proxy
+            - internet
+    http-proxy-mitmproxy:
+        image: mitmproxy/mitmproxy:latest
+        command: mitmdump
+        volumes:
+            - mitmproxy-ca:/home/mitmproxy/.mitmproxy
         networks:
             - no-internet-proxy
             - internet
@@ -43,3 +70,6 @@ networks:
         internal: true
     internet:
         driver: bridge
+
+volumes:
+    mitmproxy-ca:
