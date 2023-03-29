@@ -4,6 +4,8 @@ RUN apt-get update \
 	&& apt-get install -y \
 		iputils-ping \
 		dnsutils \
+		libnss3-tools \
+		chromium \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN wget "https://code.visualstudio.com/sha/download?build=insider&os=cli-alpine-$([ "`uname -m`" = "aarch64" ] && echo "arm64" || echo "x64")" -O- | tar -xz -C /usr/local/bin/

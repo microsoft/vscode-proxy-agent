@@ -7,9 +7,15 @@ services:
             - /bin/sh
             - -c
             - |
+                cat <<EOF >/etc/apt/apt.conf.d/proxy.conf
+                Acquire::http::Proxy "$$HTTP_PROXY";
+                Acquire::https::Proxy "$$HTTPS_PROXY";
+                EOF
                 while [ ! -f /home/mitmproxy/.mitmproxy/mitmproxy-ca-cert.pem ]; do sleep 1; done
                 cp /home/mitmproxy/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy-ca-cert.crt
                 update-ca-certificates
+                # https://chromium.googlesource.com/chromium/src/+/master/docs/linux/cert_management.md#linux-cert-management
+                su -c 'mkdir -p "$$HOME/.pki/nssdb" && certutil -d "sql:$$HOME/.pki/nssdb" -A -t "C,," -n "mitmproxy CA" -i /home/mitmproxy/.mitmproxy/mitmproxy-ca-cert.pem' node
                 sleep inf
         privileged: true
         links:
