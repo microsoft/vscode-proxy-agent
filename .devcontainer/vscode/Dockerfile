@@ -13,5 +13,6 @@ RUN mv /usr/local/bin/code-insiders /usr/local/bin/code-cli-insiders
 
 ADD install-vscode.sh /root/
 RUN /root/install-vscode.sh
+ADD --chown=node:node ["settings.json", "/home/node/.config/Code - Insiders/User/settings.json"]
 
 CMD sleep inf
