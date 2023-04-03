@@ -2,5 +2,8 @@
 	"name": "VS Code with Proxy",
 	"dockerComposeFile": "docker-compose.yml",
 	"service": "vscode",
-	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}"
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {}
+	}
 }
