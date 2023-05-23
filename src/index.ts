@@ -351,7 +351,7 @@ export function createTlsPatch(originals: typeof tls) {
 function patchCreateSecureContext(original: typeof tls.createSecureContext): typeof tls.createSecureContext {
 	return function (details?: tls.SecureContextOptions): ReturnType<typeof tls.createSecureContext> {
 		const context = original.apply(null, arguments as any);
-		const certs = (details as SecureContextOptionsPatch)._vscodeAdditionalCaCerts;
+		const certs = (details as SecureContextOptionsPatch)?._vscodeAdditionalCaCerts;
 		if (certs) {
 			for (const cert of certs) {
 				context.context.addCACert(cert);
