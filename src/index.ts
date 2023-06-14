@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as net from 'net';
 import * as http from 'http';
 import type * as https from 'https';
 import * as tls from 'tls';
@@ -55,6 +56,8 @@ export interface ProxyAgentParams {
 	getLogLevel(): LogLevel;
 	proxyResolveTelemetry(event: ProxyResolveEvent): void;
 	useHostProxy: boolean;
+	useSystemCertificatesV2: boolean;
+	addCertificates: (string | Buffer)[];
 	env: NodeJS.ProcessEnv;
 }
 
@@ -339,13 +342,69 @@ export function createHttpPatch(originals: typeof http | typeof https, resolvePr
 }
 
 export interface SecureContextOptionsPatch {
-	_vscodeAdditionalCaCerts?: string[];
+	_vscodeAdditionalCaCerts?: (string | Buffer)[];
 }
 
-export function createTlsPatch(originals: typeof tls) {
+export function createTlsPatch(params: ProxyAgentParams, originals: typeof tls) {
 	return {
+		connect: patchConnect(params, originals.connect),
 		createSecureContext: patchCreateSecureContext(originals.createSecureContext),
 	};
+}
+
+function patchConnect(params: ProxyAgentParams, original: typeof tls.connect): typeof tls.connect {
+	function connect(options: tls.ConnectionOptions, secureConnectListener?: () => void): tls.TLSSocket;
+	function connect(port: number, host?: string, options?: tls.ConnectionOptions, secureConnectListener?: () => void): tls.TLSSocket;
+	function connect(port: number, options?: tls.ConnectionOptions, secureConnectListener?: () => void): tls.TLSSocket;
+	function connect(...args: any[]): tls.TLSSocket {
+		let options: tls.ConnectionOptions | undefined = args.find(arg => arg && typeof arg === 'object');
+		if (!params.useSystemCertificatesV2 || options?.ca) {
+			return original.apply(null, arguments as any);
+		}
+		params.log(LogLevel.Trace, 'ProxyResolver#connect', ...args);
+		let secureConnectListener: (() => void) | undefined = args.find(arg => typeof arg === 'function');
+		if (!options) {
+			options = {};
+			const listenerIndex = args.findIndex(arg => typeof arg === 'function');
+			if (listenerIndex !== -1) {
+				args[listenerIndex - 1] = options;
+			} else {
+				args[2] = options;
+			}
+		} else {
+			options = {
+				...options
+			};
+		}
+		const port = typeof args[0] === 'number' ? args[0]
+			: typeof args[0] === 'string' && !isNaN(Number(args[0])) ? Number(args[0]) // E.g., http2 module passes port as string.
+			: options.port!;
+		const host = typeof args[1] === 'string' ? args[1] : options.host!;
+		if (!options.socket) {
+			if (!options.secureContext) {
+				options.secureContext = tls.createSecureContext(options);
+			}
+			const socket = options.socket = new net.Socket();
+			getCaCertificates(params)
+				.then(caCertificates => {
+					for (const cert of (caCertificates?.certs || []).concat(params.addCertificates)) {
+						options!.secureContext!.context.addCACert(cert);
+					}
+					socket.connect(port, host);
+				})
+				.catch(err => {
+					params.log(LogLevel.Error, 'ProxyResolver#connect', toErrorMessage(err));
+				});
+		}
+		if (typeof args[1] === 'string') {
+			return original(port, host, options, secureConnectListener);
+		} else if (typeof args[0] === 'number' || typeof args[0] === 'string' && !isNaN(Number(args[0]))) {
+			return original(port, options, secureConnectListener);
+		} else {
+			return original(options, secureConnectListener);
+		}
+	}
+	return connect;
 }
 
 function patchCreateSecureContext(original: typeof tls.createSecureContext): typeof tls.createSecureContext {
@@ -398,7 +457,7 @@ async function getCaCertificates({ log }: ProxyAgentParams) {
 	return _caCertificates;
 }
 
-async function readCaCertificates() {
+async function readCaCertificates(): Promise<{ append: boolean; certs: (string | Buffer)[] } | undefined> {
 	if (process.platform === 'win32') {
 		return readWindowsCaCertificates();
 	}

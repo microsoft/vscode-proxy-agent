@@ -4,10 +4,24 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as assert from 'assert';
 
+import * as vpa from '../../..';
+
 export const ca = [
 	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_cert.pem')),
 	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_teapot_cert.pem')),
 ];
+
+export const directProxyAgentParams: vpa.ProxyAgentParams = {
+	resolveProxy: async () => 'DIRECT',
+	getHttpProxySetting: () => undefined,
+	log: (level: vpa.LogLevel, message: string, ...args: any[]) => level >= vpa.LogLevel.Debug && console.log(message, ...args),
+	getLogLevel: () => vpa.LogLevel.Debug,
+	proxyResolveTelemetry: () => undefined,
+	useHostProxy: true,
+	useSystemCertificatesV2: true,
+	addCertificates: ca,
+	env: {},
+};
 
 export async function testRequest<C extends typeof https | typeof http>(client: C, options: C extends typeof https ? https.RequestOptions : http.RequestOptions, testOptions: { assertResult?: (result: any) => void; } = {}) {
 	return new Promise<void>((resolve, reject) => {

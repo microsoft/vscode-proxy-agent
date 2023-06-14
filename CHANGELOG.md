@@ -1,6 +1,12 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.14.0]
+- Load certificates in tls.connect ([microsoft/vscode#185098](https://github.com/microsoft/vscode/issues/185098))
+
+## [0.13.0]
+- Rename to @vscode/proxy-agent.
+
 ## [0.12.0]
 - Avoid buffer deprecation warning (fixes [microsoft/vscode#136874](https://github.com/microsoft/vscode/issues/136874))
 

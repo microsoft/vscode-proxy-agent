@@ -1,7 +1,7 @@
 import * as https from 'https';
 import * as vpa from '../../..';
 import createPacProxyAgent from '../../../src/agent';
-import { testRequest, ca } from './utils';
+import { testRequest, ca, directProxyAgentParams } from './utils';
 import * as assert from 'assert';
 
 describe('Direct client', function () {
@@ -63,15 +63,6 @@ describe('Direct client', function () {
 		});
 	});
 
-	const directProxyAgentParams = {
-		resolveProxy: async () => 'DIRECT',
-		getHttpProxySetting: () => undefined,
-		log: (level: vpa.LogLevel, message: string, ...args: any[]) => level >= vpa.LogLevel.Debug && console.log(message, ...args),
-		getLogLevel: () => vpa.LogLevel.Debug,
-		proxyResolveTelemetry: () => undefined,
-		useHostProxy: true,
-		env: {},
-	};
 	it('should override original agent', async function () {
 		// https://github.com/microsoft/vscode/issues/117054
 		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
