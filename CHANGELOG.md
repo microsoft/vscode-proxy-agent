@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.14.1]
+- Load certificates in net.connect ([microsoft/vscode#185098](https://github.com/microsoft/vscode/issues/185098))
+
 ## [0.14.0]
 - Load certificates in tls.connect ([microsoft/vscode#185098](https://github.com/microsoft/vscode/issues/185098))
 
