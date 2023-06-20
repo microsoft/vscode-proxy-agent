@@ -11,10 +11,9 @@ import * as nodeurl from 'url';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as cp from 'child_process';
+import * as crypto from 'crypto';
 
-import debug from 'debug';
 import createPacProxyAgent, { PacProxyAgent } from './agent';
-const SocksProxyAgent = require('socks-proxy-agent');
 
 export enum LogLevel {
 	Trace,
@@ -495,8 +494,21 @@ async function getCaCertificates(params: ProxyAgentParams) {
 	if (!_caCertificates) {
 		_caCertificates = readCaCertificates()
 			.then(res => {
-				params.log(LogLevel.Debug, 'ProxyResolver#getCaCertificates count', res && res.certs.length);
-				_caCertificateValues = (res?.certs || []).concat(params.addCertificates);
+				const certs = (res?.certs || []).concat(params.addCertificates);
+				params.log(LogLevel.Debug, 'ProxyResolver#getCaCertificates count', certs.length);
+				const now = Date.now();
+				_caCertificateValues = certs
+					.filter(cert => {
+						try {
+							const parsedCert = new crypto.X509Certificate(cert);
+							const parsedDate = Date.parse(parsedCert.validTo);
+							return isNaN(parsedDate) || parsedDate > now;
+						} catch (err) {
+							params.log(LogLevel.Debug, 'ProxyResolver#getCaCertificates parse error', (err as any)?.message || err );
+							return false;
+						}
+					});
+				params.log(LogLevel.Debug, 'ProxyResolver#getCaCertificates count filtered', _caCertificateValues.length);
 				return _caCertificateValues.length > 0 ? {
 					certs: _caCertificateValues,
 					append: res?.append !== false,

@@ -12,7 +12,7 @@ services:
         working_dir: /repo/tests/test-client
         environment:
             - MOCHA_TESTS=src/direct.test.ts src/tls.test.ts
-        command: npm run test:watch
+        command: /bin/sh -c 'rm -rf /root/.npm && npm run test:watch'
     test-proxy-client:
         image: node:16
         links:
@@ -24,7 +24,7 @@ services:
         working_dir: /repo/tests/test-client
         environment:
             - MOCHA_TESTS=src/proxy.test.ts
-        command: npm run test:watch
+        command: /bin/sh -c 'rm -rf /root/.npm && npm run test:watch'
     test-http-proxy:
         image: minimum2scp/squid:latest
         links:

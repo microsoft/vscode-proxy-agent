@@ -14,7 +14,7 @@ export const ca = [
 export const directProxyAgentParams: vpa.ProxyAgentParams = {
 	resolveProxy: async () => 'DIRECT',
 	getHttpProxySetting: () => undefined,
-	log: (level: vpa.LogLevel, message: string, ...args: any[]) => level >= vpa.LogLevel.Debug && console.log(message, ...args),
+	log: (_level: vpa.LogLevel, message: string, ...args: any[]) => console.log(message, ...args),
 	getLogLevel: () => vpa.LogLevel.Debug,
 	proxyResolveTelemetry: () => undefined,
 	useHostProxy: true,
