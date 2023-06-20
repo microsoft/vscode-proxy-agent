@@ -11,6 +11,10 @@ services:
                 Acquire::http::Proxy "$$HTTP_PROXY";
                 Acquire::https::Proxy "$$HTTPS_PROXY";
                 EOF
+                cat <<EOF >>/etc/wgetrc
+                http_proxy=$$HTTP_PROXY
+                https_proxy=$$HTTPS_PROXY
+                EOF
                 while [ ! -f /home/mitmproxy/.mitmproxy/mitmproxy-ca-cert.pem ]; do sleep 1; done
                 cp /home/mitmproxy/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy-ca-cert.crt
                 update-ca-certificates
