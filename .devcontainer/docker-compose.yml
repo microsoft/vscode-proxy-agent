@@ -23,10 +23,10 @@ services:
                 sleep inf
         privileged: true
         links:
-            - http-proxy-squid
-            - http-proxy-privoxy
+            # - http-proxy-squid
+            # - http-proxy-privoxy
             - http-proxy-mitmproxy
-            - dns-proxy
+            # - dns-proxy
         environment:
             # - HTTP_PROXY=http://http-proxy-squid:3128
             # - HTTPS_PROXY=http://http-proxy-squid:3128
@@ -38,21 +38,21 @@ services:
         volumes:
             - mitmproxy-ca:/home/mitmproxy/.mitmproxy
             - ../..:/workspaces
-        dns:
-            - 172.33.0.10
+        # dns:
+        #     - 172.33.0.10
         networks:
             - no-internet-proxy
             - no-internet-dns
-    http-proxy-squid:
-        image: minimum2scp/squid:latest
-        networks:
-            - no-internet-proxy
-            - internet
-    http-proxy-privoxy:
-        build: http-proxy-privoxy
-        networks:
-            - no-internet-proxy
-            - internet
+    # http-proxy-squid:
+    #     image: minimum2scp/squid:latest
+    #     networks:
+    #         - no-internet-proxy
+    #         - internet
+    # http-proxy-privoxy:
+    #     build: http-proxy-privoxy
+    #     networks:
+    #         - no-internet-proxy
+    #         - internet
     http-proxy-mitmproxy:
         image: mitmproxy/mitmproxy:latest
         command: mitmdump
@@ -61,12 +61,12 @@ services:
         networks:
             - no-internet-proxy
             - internet
-    dns-proxy:
-        image: defreitas/dns-proxy-server:latest
-        networks:
-            no-internet-dns:
-                ipv4_address: 172.33.0.10
-            internet:
+    # dns-proxy:
+    #     image: defreitas/dns-proxy-server:latest
+    #     networks:
+    #         no-internet-dns:
+    #             ipv4_address: 172.33.0.10
+    #         internet:
 
 networks:
     no-internet-proxy:
