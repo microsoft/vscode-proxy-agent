@@ -362,6 +362,7 @@ function patchNetConnect(params: ProxyAgentParams, original: typeof net.connect)
 		}
 		params.log(LogLevel.Trace, 'ProxyResolver#net.connect', ...args);
 		const socket = new net.Socket();
+		(socket as any).connecting = true;
 		getCaCertificates(params)
 			.then(() => {
 				socket.connect.apply(socket, arguments as any);
@@ -433,6 +434,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 			}
 			params.log(LogLevel.Trace, 'ProxyResolver#connect creating unconnected socket');
 			const socket = options.socket = new net.Socket();
+			(socket as any).connecting = true;
 			getCaCertificates(params)
 				.then(caCertificates => {
 					params.log(LogLevel.Trace, 'ProxyResolver#connect adding certs before connecting socket');

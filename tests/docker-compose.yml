@@ -11,7 +11,7 @@ services:
             - test-servers
         working_dir: /repo/tests/test-client
         environment:
-            - MOCHA_TESTS=src/direct.test.ts src/tls.test.ts
+            - MOCHA_TESTS=src/direct.test.ts src/tls.test.ts src/socket.test.ts
         command: /bin/sh -c 'rm -rf /root/.npm && npm run test:watch'
     test-proxy-client:
         image: node:16
