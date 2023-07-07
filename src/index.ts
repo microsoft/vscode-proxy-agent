@@ -244,8 +244,10 @@ function proxyFromConfigURL(configURL: string | undefined) {
 		return 'PROXY ' + proxy;
 	} else if (scheme === 'https') {
 		return 'HTTPS ' + proxy;
-	} else if (scheme === 'socks') {
+	} else if (scheme === 'socks' || scheme === 'socks5' || scheme === 'socks5h') {
 		return 'SOCKS ' + proxy;
+	} else if (scheme === 'socks4' || scheme === 'socks4a') {
+		return 'SOCKS4 ' + proxy;
 	}
 	return undefined;
 }
