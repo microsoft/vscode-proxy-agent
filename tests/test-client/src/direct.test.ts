@@ -1,3 +1,4 @@
+import * as http from 'http';
 import * as https from 'https';
 import * as vpa from '../../..';
 import createPacProxyAgent from '../../../src/agent';
@@ -40,12 +41,12 @@ describe('Direct client', function () {
 			hostname: 'test-https-server',
 			path: '/test-path',
 			agent: createPacProxyAgent(async () => 'DIRECT', {
-				originalAgent: {
-					addRequest: (req: any, opts: any) => {
+				originalAgent: new class extends http.Agent {
+					addRequest(req: any, opts: any): void {
 						originalAgent = true;
 						(<any>https.globalAgent).addRequest(req, opts);
 					}
-				} as any
+				}()
 			}),
 			ca,
 		}, {
@@ -74,18 +75,17 @@ describe('Direct client', function () {
 		await testRequest(patchedHttps, {
 			hostname: 'test-https-server',
 			path: '/test-path',
-			agent: {
-				defaultPort: 443, // This is required to support request options without port/defaultPort.
-				addRequest: (req: any, opts: any) => {
+			agent: new class extends https.Agent {
+				addRequest(req: any, opts: any): void {
 					seen = true;
 					(<any>https.globalAgent).addRequest(req, opts);
 				}
-			} as any,
+			}(),
 			ca,
 		});
 		assert.ok(!seen, 'Original agent called!');
 	});
-	it('should use original agent', async function () {
+	it('should use original agent 1', async function () {
 		// https://github.com/microsoft/vscode/issues/117054 avoiding https://github.com/microsoft/vscode/issues/120354
 		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
@@ -96,18 +96,17 @@ describe('Direct client', function () {
 		await testRequest(patchedHttps, {
 			hostname: '',
 			path: '/test-path',
-			agent: {
-				defaultPort: 443, // This is required to support request options without port/defaultPort.
-				addRequest: (req: any, opts: any) => {
+			agent: new class extends https.Agent {
+				addRequest(req: any, opts: any): void {
 					seen = true;
 					(<any>https.globalAgent).addRequest(req, opts);
 				}
-			} as any,
+			}(),
 			ca,
 		}).catch(() => {}); // Connection failure expected.
 		assert.ok(seen, 'Original agent not called!');
 	});
-	it('should use original agent', async function () {
+	it('should use original agent 2', async function () {
 		// https://github.com/microsoft/vscode/issues/117054
 		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
@@ -118,18 +117,17 @@ describe('Direct client', function () {
 		await testRequest(patchedHttps, {
 			hostname: 'test-https-server',
 			path: '/test-path',
-			agent: {
-				defaultPort: 443, // This is required to support request options without port/defaultPort.
-				addRequest: (req: any, opts: any) => {
+			agent: new class extends https.Agent {
+				addRequest(req: any, opts: any): void {
 					seen = true;
 					(<any>https.globalAgent).addRequest(req, opts);
 				}
-			} as any,
+			}(),
 			ca,
 		});
 		assert.ok(seen, 'Original agent not called!');
 	});
-	it('should use original agent', async function () {
+	it('should use original agent 3', async function () {
 		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
@@ -139,13 +137,12 @@ describe('Direct client', function () {
 		await testRequest(patchedHttps, {
 			hostname: 'test-https-server',
 			path: '/test-path',
-			agent: {
-				defaultPort: 443, // This is required to support request options without port/defaultPort.
-				addRequest: (req: any, opts: any) => {
+			agent: new class extends https.Agent {
+				addRequest(req: any, opts: any): void {
 					seen = true;
 					(<any>https.globalAgent).addRequest(req, opts);
 				}
-			} as any,
+			}(),
 			ca,
 		});
 		assert.ok(seen, 'Original agent not called!');

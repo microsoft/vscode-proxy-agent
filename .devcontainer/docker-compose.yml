@@ -44,7 +44,7 @@ services:
             - no-internet-proxy
             - no-internet-dns
     # http-proxy-squid:
-    #     image: minimum2scp/squid:latest
+    #     image: ubuntu/squid:latest
     #     networks:
     #         - no-internet-proxy
     #         - internet

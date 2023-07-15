@@ -1,10 +1,8 @@
-version: '3.3'
+version: '3.9'
 
 services:
     test-direct-client:
         image: node:16
-        links:
-            - test-https-server
         volumes:
             - ..:/repo
         networks:
@@ -15,8 +13,6 @@ services:
         command: /bin/sh -c 'rm -rf /root/.npm && npm run test:watch'
     test-proxy-client:
         image: node:16
-        links:
-            - test-http-proxy
         volumes:
             - ..:/repo
         networks:
@@ -26,9 +22,7 @@ services:
             - MOCHA_TESTS=src/proxy.test.ts
         command: /bin/sh -c 'rm -rf /root/.npm && npm run test:watch'
     test-http-proxy:
-        image: minimum2scp/squid:latest
-        links:
-            - test-https-server
+        image: ubuntu/squid:latest
         networks:
             - test-proxies
             - test-proxies-and-servers
@@ -37,8 +31,6 @@ services:
     test-http-auth-proxy:
         image: test-http-auth-proxy:latest
         build: test-http-auth-proxy
-        links:
-            - test-https-server
         networks:
             - test-proxies
             - test-proxies-and-servers

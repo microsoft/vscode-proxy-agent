@@ -27,7 +27,12 @@ export async function testRequest<C extends typeof https | typeof http>(client: 
 	return new Promise<void>((resolve, reject) => {
 		const req = client.request(options, res => {
 			if (!res.statusCode || res.statusCode < 200 || res.statusCode > 299) {
-				reject(new Error(`Error status: ${res.statusCode} ${res.statusMessage}`));
+				const chunks: Buffer[] = [];
+				res.on('data', chunk => chunks.push(chunk));
+				res.on('end', () => {
+					reject(new Error(`Error status: ${res.statusCode} ${res.statusMessage} \n${Buffer.concat(chunks).toString()}`));
+				});
+				return;
 			}
 			let data = '';
 			res.setEncoding('utf8');

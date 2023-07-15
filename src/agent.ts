@@ -3,17 +3,14 @@ import https from 'https';
 import net from 'net';
 import once from '@tootallnate/once';
 import createDebug from 'debug';
-import { Readable } from 'stream';
+import { Readable, Duplex } from 'stream';
 import { format, parse } from 'url';
 import { HttpProxyAgent, HttpProxyAgentOptions } from 'http-proxy-agent';
 import { HttpsProxyAgent, HttpsProxyAgentOptions } from 'https-proxy-agent';
 import { SocksProxyAgent, SocksProxyAgentOptions } from 'socks-proxy-agent';
 import {
 	Agent,
-	AgentCallbackReturn,
-	AgentOptions,
-	ClientRequest,
-	RequestOptions
+	AgentConnectOpts,
 } from 'agent-base';
 
 const debug = createDebug('pac-proxy-agent');
@@ -53,10 +50,7 @@ class _PacProxyAgent extends Agent {
 	 *
 	 * @api protected
 	 */
-	async callback(
-		req: ClientRequest,
-		opts: RequestOptions
-	): Promise<AgentCallbackReturn> {
+	async connect(req: http.ClientRequest, opts: AgentConnectOpts): Promise<Duplex | http.Agent> {
 		const { secureEndpoint } = opts;
 
 		// Calculate the `url` parameter
@@ -104,7 +98,6 @@ class _PacProxyAgent extends Agent {
 
 		for (const proxy of proxies) {
 			let agent: http.Agent | null = null;
-			let socket: net.Socket | null = null;
 			const [type, target] = proxy.split(/\s+/);
 			debug('Attempting to use proxy: %o', proxy);
 
@@ -129,25 +122,18 @@ class _PacProxyAgent extends Agent {
 				const proxyURL = `${
 					type === 'HTTPS' ? 'https' : 'http'
 				}://${target}`;
-				const proxyOpts = { ...this.opts, ...parse(proxyURL) };
 				if (secureEndpoint) {
-					agent = new HttpsProxyAgent(proxyOpts);
+					agent = new HttpsProxyAgent(proxyURL, this.opts);
 				} else {
-					agent = new HttpProxyAgent(proxyOpts);
+					agent = new HttpProxyAgent(proxyURL, this.opts);
 				}
 			}
 
 			try {
-				if (socket) {
-					// "DIRECT" connection, wait for connection confirmation
-					await once(socket, 'connect');
-					req.emit('proxy', { proxy, socket });
-					return socket;
-				}
 				if (agent) {
-					let s: AgentCallbackReturn;
+					let s: Duplex | http.Agent;
 					if (agent instanceof Agent) {
-						s = await agent.callback(req, opts);
+						s = await agent.connect(req, opts);
 					} else {
 						s = agent;
 					}
@@ -185,11 +171,10 @@ function createPacProxyAgent(
 }
 
 namespace createPacProxyAgent {
-	export interface PacProxyAgentOptions
-		extends AgentOptions,
-			HttpProxyAgentOptions,
-			HttpsProxyAgentOptions,
-			SocksProxyAgentOptions {
+	export type PacProxyAgentOptions =
+			HttpProxyAgentOptions<''> &
+			HttpsProxyAgentOptions<''> &
+			SocksProxyAgentOptions & {
 		fallbackToDirect?: boolean;
 		originalAgent?: false | http.Agent;
 	}
