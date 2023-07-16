@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.16.0]
+- Upate dependencies.
+
 ## [0.15.0]
 - Skip expired certificates ([microsoft/vscode#184271](https://github.com/microsoft/vscode/issues/184271))
 - Handle additional socks schemes ([microsoft/vscode#158669](https://github.com/microsoft/vscode/issues/158669))
