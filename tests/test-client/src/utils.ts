@@ -13,12 +13,14 @@ export const ca = [
 
 export const directProxyAgentParams: vpa.ProxyAgentParams = {
 	resolveProxy: async () => 'DIRECT',
-	getHttpProxySetting: () => undefined,
+    getProxyURL: () => undefined,
+    getProxySupport: () => 'override',
+    getSystemCertificatesV1: () => false,
+    getSystemCertificatesV2: () => true,
 	log: (_level: vpa.LogLevel, message: string, ...args: any[]) => console.log(message, ...args),
 	getLogLevel: () => vpa.LogLevel.Debug,
 	proxyResolveTelemetry: () => undefined,
 	useHostProxy: true,
-	useSystemCertificatesV2: true,
 	addCertificates: ca,
 	env: {},
 };

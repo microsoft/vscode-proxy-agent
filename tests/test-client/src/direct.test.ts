@@ -69,7 +69,7 @@ describe('Direct client', function () {
 		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
-			...vpa.createHttpPatch(https, resolveProxy, { config: 'override' }, { config: false }, false),
+			...vpa.createHttpPatch(directProxyAgentParams, https, resolveProxy),
 		} as any;
 		let seen = false;
 		await testRequest(patchedHttps, {
@@ -90,7 +90,7 @@ describe('Direct client', function () {
 		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
-			...vpa.createHttpPatch(https, resolveProxy, { config: 'override' }, { config: false }, false),
+			...vpa.createHttpPatch(directProxyAgentParams, https, resolveProxy),
 		} as any;
 		let seen = false;
 		await testRequest(patchedHttps, {
@@ -111,7 +111,10 @@ describe('Direct client', function () {
 		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
-			...vpa.createHttpPatch(https, resolveProxy, { config: 'fallback' }, { config: false }, false),
+			...vpa.createHttpPatch({
+				...directProxyAgentParams,
+				getProxySupport: () => 'fallback',
+			}, https, resolveProxy),
 		} as any;
 		let seen = false;
 		await testRequest(patchedHttps, {
@@ -131,7 +134,10 @@ describe('Direct client', function () {
 		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
-			...vpa.createHttpPatch(https, resolveProxy, { config: 'on' }, { config: false }, false),
+			...vpa.createHttpPatch({
+				...directProxyAgentParams,
+				getProxySupport: () => 'on',
+			}, https, resolveProxy),
 		} as any;
 		let seen = false;
 		await testRequest(patchedHttps, {

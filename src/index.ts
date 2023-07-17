@@ -48,20 +48,25 @@ interface ConnectionResult {
 
 const maxCacheEntries = 5000; // Cache can grow twice that much due to 'oldCache'.
 
+export type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate?: string) => Promise<string | undefined>; 
+
 export interface ProxyAgentParams {
 	resolveProxy(url: string): Promise<string | undefined>;
-	getHttpProxySetting(): string | undefined;
+	getProxyURL: () => string | undefined,
+	getProxySupport: () => ProxySupportSetting,
+	getSystemCertificatesV1: () => boolean,
+	getSystemCertificatesV2: () => boolean,
+	lookupProxyAuthorization?: LookupProxyAuthorization;
 	log(level: LogLevel, message: string, ...args: any[]): void;
 	getLogLevel(): LogLevel;
 	proxyResolveTelemetry(event: ProxyResolveEvent): void;
 	useHostProxy: boolean;
-	useSystemCertificatesV2: boolean;
 	addCertificates: (string | Buffer)[];
 	env: NodeJS.ProcessEnv;
 }
 
 export function createProxyResolver(params: ProxyAgentParams) {
-	const { getHttpProxySetting, log, getLogLevel, proxyResolveTelemetry: proxyResolverTelemetry, useHostProxy, env } = params;
+	const { getProxyURL, log, getLogLevel, proxyResolveTelemetry: proxyResolverTelemetry, useHostProxy, env } = params;
 	let envProxy = proxyFromConfigURL(env.https_proxy || env.HTTPS_PROXY || env.http_proxy || env.HTTP_PROXY); // Not standardized.
 
 	let envNoProxy = noProxyFromEnv(env.no_proxy || env.NO_PROXY); // Not standardized.
@@ -150,7 +155,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			return;
 		}
 
-		let settingsProxy = proxyFromConfigURL(getHttpProxySetting());
+		let settingsProxy = proxyFromConfigURL(getProxyURL());
 		if (settingsProxy) {
 			settingsCount++;
 			callback(settingsProxy);
@@ -280,7 +285,7 @@ function noProxyFromEnv(envValue?: string) {
 
 export type ProxySupportSetting = 'override' | 'fallback' | 'on' | 'off';
 
-export function createHttpPatch(originals: typeof http | typeof https, resolveProxy: ReturnType<typeof createProxyResolver>, proxySetting: { config: ProxySupportSetting }, certSetting: { config: boolean }, onRequest: boolean) {
+export function createHttpPatch(params: ProxyAgentParams, originals: typeof http | typeof https, resolveProxy: ReturnType<typeof createProxyResolver>) {
 	return {
 		get: patch(originals.get),
 		request: patch(originals.request)
@@ -309,9 +314,9 @@ export function createHttpPatch(originals: typeof http | typeof https, resolvePr
 			}
 			const isHttps = (originals.globalAgent as any).protocol === 'https:';
 			const optionsPatched = originalAgent instanceof PacProxyAgent;
-			const config: ProxySupportSetting = onRequest && ((<any>options)._vscodeProxySupport || /* LS */ (<any>options)._vscodeSystemProxy) || proxySetting.config;
+			const config = params.getProxySupport();
 			const useProxySettings = !optionsPatched && (config === 'override' || config === 'fallback' || (config === 'on' && originalAgent === undefined));
-			const useSystemCertificates = !optionsPatched && certSetting.config && isHttps && !(options as https.RequestOptions).ca;
+			const useSystemCertificates = !optionsPatched && params.getSystemCertificatesV1() && isHttps && !(options as https.RequestOptions).ca;
 
 			if (useProxySettings || useSystemCertificates) {
 				if (url) {
@@ -332,7 +337,10 @@ export function createHttpPatch(originals: typeof http | typeof https, resolvePr
 				const resolveP = (req: http.ClientRequest, opts: http.RequestOptions, url: string): Promise<string | undefined> => new Promise<string | undefined>(resolve => resolveProxy({ useProxySettings, useSystemCertificates }, req, opts, url, resolve));
 				const host = options.hostname || options.host;
 				const isLocalhost = !host || host === 'localhost' || host === '127.0.0.1'; // Avoiding https://github.com/microsoft/vscode/issues/120354
-				options.agent = createPacProxyAgent(resolveP, { originalAgent: (!useProxySettings || isLocalhost || config === 'fallback') ? originalAgent : undefined })
+				options.agent = createPacProxyAgent(resolveP, {
+					originalAgent: (!useProxySettings || isLocalhost || config === 'fallback') ? originalAgent : undefined,
+					lookupProxyAuthorization: params.lookupProxyAuthorization,
+				})
 				return original(options, callback);
 			}
 
@@ -357,7 +365,7 @@ function patchNetConnect(params: ProxyAgentParams, original: typeof net.connect)
     function connect(port: number, host?: string, connectionListener?: () => void): net.Socket;
     function connect(path: string, connectionListener?: () => void): net.Socket;
 	function connect(...args: any[]): net.Socket {
-		if (!params.useSystemCertificatesV2) {
+		if (!params.getSystemCertificatesV2()) {
 			return original.apply(null, arguments as any);
 		}
 		params.log(LogLevel.Trace, 'ProxyResolver#net.connect', ...args);
@@ -388,7 +396,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 	function connect(port: number, options?: tls.ConnectionOptions, secureConnectListener?: () => void): tls.TLSSocket;
 	function connect(...args: any[]): tls.TLSSocket {
 		let options: tls.ConnectionOptions | undefined = args.find(arg => arg && typeof arg === 'object');
-		if (!params.useSystemCertificatesV2 || options?.ca) {
+		if (!params.getSystemCertificatesV2() || options?.ca) {
 			return original.apply(null, arguments as any);
 		}
 		params.log(LogLevel.Trace, 'ProxyResolver#connect', ...args);

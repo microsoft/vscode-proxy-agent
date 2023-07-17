@@ -12,7 +12,8 @@ describe('TLS patch', function () {
 			...tls,
 			...createTlsPatch({
 				...directProxyAgentParams,
-				useSystemCertificatesV2: false,
+				getSystemCertificatesV1: () => true,
+				getSystemCertificatesV2: () => false,
 				addCertificates: [],
 			}, tls),
 		};
