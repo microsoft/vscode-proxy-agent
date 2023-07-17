@@ -1,7 +1,6 @@
 import http from 'http';
 import https from 'https';
 import net from 'net';
-import once from '@tootallnate/once';
 import createDebug from 'debug';
 import { Readable, Duplex } from 'stream';
 import { format, parse } from 'url';
@@ -12,6 +11,7 @@ import {
 	Agent,
 	AgentConnectOpts,
 } from 'agent-base';
+import EventEmitter from 'events';
 
 const debug = createDebug('pac-proxy-agent');
 
@@ -123,7 +123,7 @@ class _PacProxyAgent extends Agent {
 					type === 'HTTPS' ? 'https' : 'http'
 				}://${target}`;
 				if (secureEndpoint) {
-					agent = new HttpsProxyAgent(proxyURL, this.opts);
+					agent = new HttpsProxyAgent2(proxyURL, this.opts);
 				} else {
 					agent = new HttpProxyAgent(proxyURL, this.opts);
 				}
@@ -155,6 +155,78 @@ class _PacProxyAgent extends Agent {
 	}
 }
 
+type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate?: string) => Promise<string | undefined>; 
+
+type HttpsProxyAgentOptions2<Uri> = HttpsProxyAgentOptions<Uri> & { lookupProxyAuthorization?: LookupProxyAuthorization };
+
+interface ConnectResponse {
+	statusCode: number;
+	statusText: string;
+	headers: http.IncomingHttpHeaders;
+}
+
+class HttpsProxyAgent2<Uri extends string> extends HttpsProxyAgent<Uri> {
+
+	addHeaders: http.OutgoingHttpHeaders;
+	lookupProxyAuthorization?: LookupProxyAuthorization;
+
+	constructor(proxy: Uri | URL, opts: HttpsProxyAgentOptions2<Uri>) {
+		const addHeaders = {};
+		const origHeaders = opts?.headers;
+		const agentOpts: HttpsProxyAgentOptions<Uri> = {
+			...opts,
+			headers: (): http.OutgoingHttpHeaders => {
+				const headers = origHeaders
+					? typeof origHeaders === 'function'
+						? origHeaders()
+						: origHeaders
+					: {};
+				return {
+					...headers,
+					...addHeaders
+				};
+			}
+		};
+		super(proxy, agentOpts);
+		this.addHeaders = addHeaders;
+		this.lookupProxyAuthorization = opts.lookupProxyAuthorization;
+	}
+
+	async connect(req: http.ClientRequest, opts: AgentConnectOpts): Promise<net.Socket> {
+		const tmpReq = new EventEmitter();
+		let connect: ConnectResponse | undefined;
+		tmpReq.once('proxyConnect', (_connect: ConnectResponse) => {
+			connect = _connect;
+		});
+		if (this.lookupProxyAuthorization) {
+			try {
+				const proxyAuthorization = await this.lookupProxyAuthorization(this.proxy.href);
+				if (proxyAuthorization) {
+					this.addHeaders['Proxy-Authorization'] = proxyAuthorization;
+				}
+			} catch (err) {
+				req.emit('error', err);
+			}
+		}
+		const s = await super.connect(tmpReq as any, opts);
+		if (this.lookupProxyAuthorization && connect?.statusCode === 407 && connect.headers['proxy-authenticate']) {
+			try {
+				const proxyAuthorization = await this.lookupProxyAuthorization(this.proxy.href, connect.headers['proxy-authenticate']);
+				if (proxyAuthorization) {
+					this.addHeaders['Proxy-Authorization'] = proxyAuthorization;
+					tmpReq.removeAllListeners();
+					s.destroy();
+					return this.connect(req, opts);
+				}
+			} catch (err) {
+				req.emit('error', err);
+			}
+		}
+		req.once('socket', s => tmpReq.emit('socket', s));
+		return s;
+	}
+}
+
 function createPacProxyAgent(
 	resolver: FindProxyForURL,
 	opts?: createPacProxyAgent.PacProxyAgentOptions
@@ -173,7 +245,7 @@ function createPacProxyAgent(
 namespace createPacProxyAgent {
 	export type PacProxyAgentOptions =
 			HttpProxyAgentOptions<''> &
-			HttpsProxyAgentOptions<''> &
+			HttpsProxyAgentOptions2<''> &
 			SocksProxyAgentOptions & {
 		fallbackToDirect?: boolean;
 		originalAgent?: false | http.Agent;

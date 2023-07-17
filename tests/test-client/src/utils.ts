@@ -30,7 +30,10 @@ export async function testRequest<C extends typeof https | typeof http>(client: 
 				const chunks: Buffer[] = [];
 				res.on('data', chunk => chunks.push(chunk));
 				res.on('end', () => {
-					reject(new Error(`Error status: ${res.statusCode} ${res.statusMessage} \n${Buffer.concat(chunks).toString()}`));
+					const err = new Error(`Error status: ${res.statusCode} ${res.statusMessage} \n${Buffer.concat(chunks).toString()}`);
+					(err as any).statusCode = res.statusCode;
+					(err as any).statusMessage = res.statusMessage;
+					reject(err);
 				});
 				return;
 			}
