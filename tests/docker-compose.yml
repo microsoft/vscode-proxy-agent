@@ -11,8 +11,11 @@ services:
         environment:
             - MOCHA_TESTS=src/direct.test.ts src/tls.test.ts src/socket.test.ts
         command: /bin/sh -c 'rm -rf /root/.npm && npm run test:watch'
+        depends_on:
+            - test-https-server
     test-proxy-client:
-        image: node:16
+        image: test-proxy-client:latest
+        build: test-proxy-client
         volumes:
             - ..:/repo
         networks:
@@ -20,7 +23,15 @@ services:
         working_dir: /repo/tests/test-client
         environment:
             - MOCHA_TESTS=src/proxy.test.ts
-        command: /bin/sh -c 'rm -rf /root/.npm && npm run test:watch'
+        command: /bin/sh -c '
+            /usr/local/bin/configure-kerberos-client.sh &&
+            rm -rf /root/.npm &&
+            npm run test:watch'
+        depends_on:
+            - test-http-proxy
+            - test-http-auth-proxy
+            - test-http-kerberos-proxy
+            - test-https-server
     test-http-proxy:
         image: ubuntu/squid:latest
         networks:
@@ -36,6 +47,15 @@ services:
             - test-proxies-and-servers
         ports:
             - 3128
+    test-http-kerberos-proxy:
+        image: test-http-kerberos-proxy:latest
+        build: test-http-kerberos-proxy
+        container_name: test-http-kerberos-proxy # needs to be configured to have a static name for the kerberos server hostname
+        networks:
+            - test-proxies
+            - test-proxies-and-servers
+        ports:
+            - 80
     test-https-server:
         image: test-https-server:latest
         build: test-https-server

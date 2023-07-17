@@ -3,7 +3,7 @@ import https from 'https';
 import net from 'net';
 import createDebug from 'debug';
 import { Readable, Duplex } from 'stream';
-import { format, parse } from 'url';
+import { format } from 'url';
 import { HttpProxyAgent, HttpProxyAgentOptions } from 'http-proxy-agent';
 import { HttpsProxyAgent, HttpsProxyAgentOptions } from 'https-proxy-agent';
 import { SocksProxyAgent, SocksProxyAgentOptions } from 'socks-proxy-agent';
@@ -198,7 +198,7 @@ class HttpsProxyAgent2<Uri extends string> extends HttpsProxyAgent<Uri> {
 		tmpReq.once('proxyConnect', (_connect: ConnectResponse) => {
 			connect = _connect;
 		});
-		if (this.lookupProxyAuthorization) {
+		if (this.lookupProxyAuthorization && !this.addHeaders['Proxy-Authorization']) {
 			try {
 				const proxyAuthorization = await this.lookupProxyAuthorization(this.proxy.href);
 				if (proxyAuthorization) {
@@ -212,7 +212,7 @@ class HttpsProxyAgent2<Uri extends string> extends HttpsProxyAgent<Uri> {
 		if (this.lookupProxyAuthorization && connect?.statusCode === 407 && connect.headers['proxy-authenticate']) {
 			try {
 				const proxyAuthorization = await this.lookupProxyAuthorization(this.proxy.href, connect.headers['proxy-authenticate']);
-				if (proxyAuthorization) {
+				if (proxyAuthorization && proxyAuthorization !== this.addHeaders['Proxy-Authorization']) {
 					this.addHeaders['Proxy-Authorization'] = proxyAuthorization;
 					tmpReq.removeAllListeners();
 					s.destroy();
