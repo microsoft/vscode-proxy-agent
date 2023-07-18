@@ -155,7 +155,7 @@ class _PacProxyAgent extends Agent {
 	}
 }
 
-type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate?: string) => Promise<string | undefined>; 
+type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate?: string | string[]) => Promise<string | undefined>; 
 
 type HttpsProxyAgentOptions2<Uri> = HttpsProxyAgentOptions<Uri> & { lookupProxyAuthorization?: LookupProxyAuthorization };
 
@@ -209,9 +209,10 @@ class HttpsProxyAgent2<Uri extends string> extends HttpsProxyAgent<Uri> {
 			}
 		}
 		const s = await super.connect(tmpReq as any, opts);
-		if (this.lookupProxyAuthorization && connect?.statusCode === 407 && connect.headers['proxy-authenticate']) {
+		const proxyAuthenticate = connect?.headers['proxy-authenticate'] as string | string[] | undefined;
+		if (this.lookupProxyAuthorization && connect?.statusCode === 407 && proxyAuthenticate) {
 			try {
-				const proxyAuthorization = await this.lookupProxyAuthorization(this.proxy.href, connect.headers['proxy-authenticate']);
+				const proxyAuthorization = await this.lookupProxyAuthorization(this.proxy.href, proxyAuthenticate);
 				if (proxyAuthorization && proxyAuthorization !== this.addHeaders['Proxy-Authorization']) {
 					this.addHeaders['Proxy-Authorization'] = proxyAuthorization;
 					tmpReq.removeAllListeners();

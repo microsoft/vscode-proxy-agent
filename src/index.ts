@@ -48,7 +48,7 @@ interface ConnectionResult {
 
 const maxCacheEntries = 5000; // Cache can grow twice that much due to 'oldCache'.
 
-export type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate?: string) => Promise<string | undefined>; 
+export type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate?: string | string[]) => Promise<string | undefined>; 
 
 export interface ProxyAgentParams {
 	resolveProxy(url: string): Promise<string | undefined>;
