@@ -12,7 +12,8 @@ services:
             - MOCHA_TESTS=src/direct.test.ts src/tls.test.ts src/socket.test.ts
         command: /bin/sh -c 'rm -rf /root/.npm && npm run test:watch'
         depends_on:
-            - test-https-server
+            test-https-server:
+                condition: service_healthy
     test-proxy-client:
         image: test-proxy-client:latest
         build: test-proxy-client
@@ -28,10 +29,12 @@ services:
             rm -rf /root/.npm &&
             npm run test:watch'
         depends_on:
-            - test-http-proxy
-            - test-http-auth-proxy
-            - test-http-kerberos-proxy
-            - test-https-server
+            test-http-proxy:
+                condition: service_started
+            test-http-auth-proxy:
+                condition: service_started
+            test-http-kerberos-proxy:
+                condition: service_started
     test-http-proxy:
         image: ubuntu/squid:latest
         networks:
@@ -39,6 +42,9 @@ services:
             - test-proxies-and-servers
         ports:
             - 3128
+        depends_on:
+            test-https-server:
+                condition: service_healthy
     test-http-auth-proxy:
         image: test-http-auth-proxy:latest
         build: test-http-auth-proxy
@@ -47,6 +53,9 @@ services:
             - test-proxies-and-servers
         ports:
             - 3128
+        depends_on:
+            test-https-server:
+                condition: service_healthy
     test-http-kerberos-proxy:
         image: test-http-kerberos-proxy:latest
         build: test-http-kerberos-proxy
@@ -56,6 +65,9 @@ services:
             - test-proxies-and-servers
         ports:
             - 80
+        depends_on:
+            test-https-server:
+                condition: service_healthy
     test-https-server:
         image: test-https-server:latest
         build: test-https-server

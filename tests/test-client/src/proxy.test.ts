@@ -72,29 +72,61 @@ describe('Proxied client', function () {
 
 	it('should work with kerberos', function () {
 		this.timeout(10000);
+		const proxyAuthenticateCache = {};
+		const pendingLookups = {};
 		return testRequest(https, {
 			hostname: 'test-https-server',
 			path: '/test-path',
 			agent: createPacProxyAgent(async () => 'PROXY test-http-kerberos-proxy:80', {
 				async lookupProxyAuthorization(proxyURL, proxyAuthenticate) {
 					assert.strictEqual(proxyURL, 'http://test-http-kerberos-proxy/');
-					if (!proxyAuthenticate) {
-						return;
+					if (proxyAuthenticate) {
+						assert.strictEqual(proxyAuthenticate, 'Negotiate');
 					}
-					assert.strictEqual(proxyAuthenticate, 'Negotiate');
-
-					if (proxyAuthenticate.startsWith('Negotiate')) {
-						const kerberos = await import('kerberos');
-						const url = new URL(proxyURL);
-						const spn = process.platform === 'win32' ? `HTTP/${url.host}` : `HTTP@${url.host}`;
-						const client = await kerberos.initializeClient(spn);
-						const response = await client.step('');
-						return 'Negotiate ' + response;
-					}
-					return undefined;
+					return lookupProxyAuthorization(console, proxyAuthenticateCache, pendingLookups, proxyURL, proxyAuthenticate);
 				},
 			}),
 			ca,
 		});
 	});
 });
+
+// From microsoft/vscode's proxyResolver.ts:
+async function lookupProxyAuthorization(
+	extHostLogService: Console,
+	// configProvider: ExtHostConfigProvider,
+	proxyAuthenticateCache: Record<string, string | string[] | undefined>,
+	pendingLookups: Record<string, Promise<string | undefined>>,
+	proxyURL: string,
+	proxyAuthenticate?: string | string[]
+): Promise<string | undefined> {
+	const cached = proxyAuthenticateCache[proxyURL];
+	if (proxyAuthenticate) {
+		proxyAuthenticateCache[proxyURL] = proxyAuthenticate;
+	}
+	extHostLogService.trace('ProxyResolver#lookupProxyAuthorization callback', `proxyURL:${proxyURL}`, `proxyAuthenticate:${proxyAuthenticate}`, `proxyAuthenticateCache:${cached}`);
+	const header = proxyAuthenticate || cached;
+	const authenticate = Array.isArray(header) ? header : typeof header === 'string' ? [header] : [];
+	if (authenticate.some(a => /^(Negotiate|Kerberos)( |$)/i.test(a))) {
+		const lookupKey = `${proxyURL}:Negotiate`;
+		return pendingLookups[lookupKey] ??= (async () => {
+			try {
+				const kerberos = await import('kerberos');
+				const url = new URL(proxyURL);
+				// TODO: Add core user setting.
+				const spn = /* configProvider.getConfiguration('github.copilot')?.advanced?.kerberosServicePrincipal as string | undefined
+					|| */ (process.platform === 'win32' ? `HTTP/${url.hostname}` : `HTTP@${url.hostname}`);
+				extHostLogService.debug('ProxyResolver#lookupProxyAuthorization Kerberos authentication lookup', `proxyURL:${proxyURL}`, `spn:${spn}`);
+				const client = await kerberos.initializeClient(spn);
+				const response = await client.step('');
+				return 'Negotiate ' + response;
+			} catch (err) {
+				extHostLogService.error('ProxyResolver#lookupProxyAuthorization Kerberos authentication failed', err);
+				return undefined;
+			} finally {
+				delete pendingLookups[lookupKey];
+			}
+		})();
+	}
+	return undefined;
+}
