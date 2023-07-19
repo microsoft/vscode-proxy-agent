@@ -1,8 +1,11 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.17.0]
+- Add auth callback and Kerberos test setup ([microsoft/vscode#187456](https://github.com/microsoft/vscode/issues/187456))
+
 ## [0.16.0]
-- Upate dependencies.
+- Update dependencies.
 
 ## [0.15.0]
 - Skip expired certificates ([microsoft/vscode#184271](https://github.com/microsoft/vscode/issues/184271))
