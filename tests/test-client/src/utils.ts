@@ -59,7 +59,7 @@ export async function testRequest<C extends typeof https | typeof http>(client: 
 			});
 		});
 		req.on('error', err => {
-			reject(new Error(`Error: ${err.message}`));
+			reject(err);
 		});
 		req.end();
 	});

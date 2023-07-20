@@ -155,7 +155,7 @@ class _PacProxyAgent extends Agent {
 	}
 }
 
-type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate?: string | string[]) => Promise<string | undefined>; 
+type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate: string | string[] | undefined, state: Record<string, any>) => Promise<string | undefined>;
 
 type HttpsProxyAgentOptions2<Uri> = HttpsProxyAgentOptions<Uri> & { lookupProxyAuthorization?: LookupProxyAuthorization };
 
@@ -192,7 +192,7 @@ class HttpsProxyAgent2<Uri extends string> extends HttpsProxyAgent<Uri> {
 		this.lookupProxyAuthorization = opts.lookupProxyAuthorization;
 	}
 
-	async connect(req: http.ClientRequest, opts: AgentConnectOpts): Promise<net.Socket> {
+	async connect(req: http.ClientRequest, opts: AgentConnectOpts, state: Record<string, any> = {}): Promise<net.Socket> {
 		const tmpReq = new EventEmitter();
 		let connect: ConnectResponse | undefined;
 		tmpReq.once('proxyConnect', (_connect: ConnectResponse) => {
@@ -200,7 +200,7 @@ class HttpsProxyAgent2<Uri extends string> extends HttpsProxyAgent<Uri> {
 		});
 		if (this.lookupProxyAuthorization && !this.addHeaders['Proxy-Authorization']) {
 			try {
-				const proxyAuthorization = await this.lookupProxyAuthorization(this.proxy.href);
+				const proxyAuthorization = await this.lookupProxyAuthorization(this.proxy.href, undefined, state);
 				if (proxyAuthorization) {
 					this.addHeaders['Proxy-Authorization'] = proxyAuthorization;
 				}
@@ -212,12 +212,12 @@ class HttpsProxyAgent2<Uri extends string> extends HttpsProxyAgent<Uri> {
 		const proxyAuthenticate = connect?.headers['proxy-authenticate'] as string | string[] | undefined;
 		if (this.lookupProxyAuthorization && connect?.statusCode === 407 && proxyAuthenticate) {
 			try {
-				const proxyAuthorization = await this.lookupProxyAuthorization(this.proxy.href, proxyAuthenticate);
-				if (proxyAuthorization && proxyAuthorization !== this.addHeaders['Proxy-Authorization']) {
+				const proxyAuthorization = await this.lookupProxyAuthorization(this.proxy.href, proxyAuthenticate, state);
+				if (proxyAuthorization) {
 					this.addHeaders['Proxy-Authorization'] = proxyAuthorization;
 					tmpReq.removeAllListeners();
 					s.destroy();
-					return this.connect(req, opts);
+					return this.connect(req, opts, state);
 				}
 			} catch (err) {
 				req.emit('error', err);
