@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-export KERBEROS_USERNAME="vscode"
-export KERBEROS_PASSWORD="vscode"
+export KERBEROS_USERNAME="PlaceholderUsername"
+export KERBEROS_PASSWORD="Placeholder"
 export KERBEROS_REALM="vscode.proxy.test"
 export KERBEROS_PORT="80"
 export KERBEROS_HOSTNAME="test-http-kerberos-proxy.tests_test-proxies"
