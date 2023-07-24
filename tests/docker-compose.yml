@@ -80,6 +80,8 @@ services:
             - 443
 
 networks:
-    test-proxies: {}
+    test-proxies:
+        driver: bridge
+        internal: true
     test-proxies-and-servers: {}
     test-servers: {}
