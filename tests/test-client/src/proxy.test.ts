@@ -101,7 +101,8 @@ describe('Proxied client', function () {
 					if (proxyAuthenticate) {
 						assert.strictEqual(proxyAuthenticate, 'Negotiate');
 					}
-					return lookupProxyAuthorization({ ...console, trace: console.log }, proxyAuthenticateCache, proxyURL, proxyAuthenticate, state);
+					const log = { ...console, trace: console.log };
+					return lookupProxyAuthorization(log, log, proxyAuthenticateCache, true, proxyURL, proxyAuthenticate, state);
 				},
 			}),
 			ca,
@@ -112,8 +113,10 @@ describe('Proxied client', function () {
 // From microsoft/vscode's proxyResolver.ts:
 async function lookupProxyAuthorization(
 	extHostLogService: Console,
+	mainThreadTelemetry: Console,
 	// configProvider: ExtHostConfigProvider,
 	proxyAuthenticateCache: Record<string, string | string[] | undefined>,
+	isRemote: boolean,
 	proxyURL: string,
 	proxyAuthenticate: string | string[] | undefined,
 	state: { kerberosRequested?: boolean }
@@ -125,6 +128,7 @@ async function lookupProxyAuthorization(
 	extHostLogService.trace('ProxyResolver#lookupProxyAuthorization callback', `proxyURL:${proxyURL}`, `proxyAuthenticate:${proxyAuthenticate}`, `proxyAuthenticateCache:${cached}`);
 	const header = proxyAuthenticate || cached;
 	const authenticate = Array.isArray(header) ? header : typeof header === 'string' ? [header] : [];
+	sendTelemetry(mainThreadTelemetry, authenticate, isRemote);
 	if (authenticate.some(a => /^(Negotiate|Kerberos)( |$)/i.test(a)) && !state.kerberosRequested) {
 		try {
 			state.kerberosRequested = true;
@@ -141,4 +145,30 @@ async function lookupProxyAuthorization(
 		}
 	}
 	return undefined;
+}
+
+type ProxyAuthenticationClassification = {
+	owner: 'chrmarti';
+	comment: 'Data about proxy authentication requests';
+	authenticationType: { classification: 'PublicNonPersonalData'; purpose: 'FeatureInsight'; comment: 'Type of the authentication requested' };
+	extensionHostType: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Type of the extension host' };
+};
+
+type ProxyAuthenticationEvent = {
+	authenticationType: string;
+	extensionHostType: string;
+};
+
+let telemetrySent = false;
+
+function sendTelemetry(mainThreadTelemetry: Console, authenticate: string[], isRemote: boolean) {
+	if (telemetrySent || !authenticate.length) {
+		return;
+	}
+	telemetrySent = true;
+
+	mainThreadTelemetry.log('proxyAuthenticationRequest', {
+		authenticationType: authenticate.map(a => a.split(' ')[0]).join(','),
+		extensionHostType: isRemote ? 'remote' : 'local',
+	});
 }
