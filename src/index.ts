@@ -368,7 +368,7 @@ function patchNetConnect(params: ProxyAgentParams, original: typeof net.connect)
 		if (!params.getSystemCertificatesV2()) {
 			return original.apply(null, arguments as any);
 		}
-		params.log(LogLevel.Trace, 'ProxyResolver#net.connect', ...args);
+		params.log(LogLevel.Trace, 'ProxyResolver#net.connect');
 		const socket = new net.Socket();
 		(socket as any).connecting = true;
 		getCaCertificates(params)
@@ -399,7 +399,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 		if (!params.getSystemCertificatesV2() || options?.ca) {
 			return original.apply(null, arguments as any);
 		}
-		params.log(LogLevel.Trace, 'ProxyResolver#connect', ...args);
+		params.log(LogLevel.Trace, 'ProxyResolver#tls.connect');
 		let secureConnectListener: (() => void) | undefined = args.find(arg => typeof arg === 'function');
 		if (!options) {
 			options = {};
@@ -516,7 +516,7 @@ async function getCaCertificates(params: ProxyAgentParams) {
 							const parsedDate = Date.parse(parsedCert.validTo);
 							return isNaN(parsedDate) || parsedDate > now;
 						} catch (err) {
-							params.log(LogLevel.Debug, 'ProxyResolver#getCaCertificates parse error', (err as any)?.message || err );
+							params.log(LogLevel.Debug, 'ProxyResolver#getCaCertificates parse error', toErrorMessage(err));
 							return false;
 						}
 					});
