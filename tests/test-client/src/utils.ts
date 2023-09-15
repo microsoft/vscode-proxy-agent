@@ -18,7 +18,7 @@ export const directProxyAgentParams: vpa.ProxyAgentParams = {
     getSystemCertificatesV1: () => false,
     getSystemCertificatesV2: () => true,
 	log: (_level: vpa.LogLevel, message: string, ...args: any[]) => console.log(message, ...args),
-	getLogLevel: () => vpa.LogLevel.Debug,
+	getLogLevel: () => vpa.LogLevel.Trace,
 	proxyResolveTelemetry: () => undefined,
 	useHostProxy: true,
 	addCertificates: ca,

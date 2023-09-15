@@ -368,7 +368,7 @@ function patchNetConnect(params: ProxyAgentParams, original: typeof net.connect)
 		if (!params.getSystemCertificatesV2()) {
 			return original.apply(null, arguments as any);
 		}
-		params.log(LogLevel.Trace, 'ProxyResolver#net.connect');
+		params.log(LogLevel.Trace, 'ProxyResolver#net.connect', params.getLogLevel() === LogLevel.Trace ? toLogString(args) : undefined);
 		const socket = new net.Socket();
 		(socket as any).connecting = true;
 		getCaCertificates(params)
@@ -403,7 +403,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 		if (!params.getSystemCertificatesV2() || options?.ca) {
 			return original.apply(null, arguments as any);
 		}
-		params.log(LogLevel.Trace, 'ProxyResolver#tls.connect');
+		params.log(LogLevel.Trace, 'ProxyResolver#tls.connect', params.getLogLevel() === LogLevel.Trace ? toLogString(args) : undefined);
 		let secureConnectListener: (() => void) | undefined = args.find(arg => typeof arg === 'function');
 		if (!options) {
 			options = {};
@@ -643,4 +643,20 @@ function derToPem(blob: Buffer) {
 
 function toErrorMessage(err: any) {
 	return err && (err.stack || err.message) || String(err);
+}
+
+function toLogString(args: any[]) {
+	return `[${args.map(arg => JSON.stringify(arg, (key, value) => {
+			const t = typeof value;
+			if (t === 'object') {
+				return !key ? value : String(value);
+			}
+			if (t === 'function') {
+				return `[Function: ${value.name}]`;
+			}
+			if (t === 'bigint') {
+				return String(value);
+			}
+			return value;
+		})).join(', ')}]`;
 }
