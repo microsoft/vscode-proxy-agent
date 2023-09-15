@@ -460,7 +460,11 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 							tlsSocket.emit('timeout');
 						});
 					}
-					socket.connect(port!, host!);
+					socket.connect({
+						port: port!,
+						host,
+						...options,
+					});
 				})
 				.catch(err => {
 					params.log(LogLevel.Error, 'ProxyResolver#connect', toErrorMessage(err));

@@ -1,7 +1,8 @@
 import * as net from 'net';
 import * as tls from 'tls';
-import { createNetPatch, createTlsPatch, resetCaches, SecureContextOptionsPatch } from '../../../src/index';
-import { testRequest, ca, directProxyAgentParams } from './utils';
+import * as dns from 'dns';
+import { createNetPatch, createTlsPatch } from '../../../src/index';
+import { directProxyAgentParams } from './utils';
 import * as assert from 'assert';
 
 describe('Socket client', function () {
@@ -88,5 +89,35 @@ Host: test-https-server
 			socket.on('end', reject);
 		});
 		await Promise.race([timeout, new Promise((_, reject) => setTimeout(() => reject(new Error('no timeout event received')), 1000))]);
+	});
+
+	it('tls.connect() should support net.connect() options', async () => {
+		const tlsPatched = {
+			...tls,
+			...createTlsPatch(directProxyAgentParams, tls),
+		};
+		let lookupUsed = false;
+		const socket = tlsPatched.connect(443, 'test-https-server', {
+			servername: 'test-https-server', // for SNI
+			lookup: (hostname, options, callback) => {
+				lookupUsed = true;
+				dns.lookup(hostname, options, callback);
+			},
+		});
+		const p = new Promise<string>((resolve, reject) => {
+			socket.on('error', reject);
+			const chunks: Buffer[] = [];
+			socket.on('data', chunk => chunks.push(chunk));
+			socket.on('end', () => {
+				resolve(Buffer.concat(chunks).toString());
+			});
+		});
+		socket.write(`GET /test-path HTTP/1.1
+Host: test-https-server
+
+`);
+		const response = await p;
+		assert.ok(response.startsWith('HTTP/1.1 200 OK'), `Unexpected response: ${response}`);
+		assert.ok(lookupUsed, 'lookup() was not used');
 	});
 });
