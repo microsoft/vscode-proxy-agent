@@ -373,6 +373,10 @@ function patchNetConnect(params: ProxyAgentParams, original: typeof net.connect)
 		(socket as any).connecting = true;
 		getCaCertificates(params)
 			.then(() => {
+				const options: net.NetConnectOpts | undefined = args.find(arg => arg && typeof arg === 'object');
+				if (options?.timeout) {
+					socket.setTimeout(options.timeout);
+				}
 				socket.connect.apply(socket, arguments as any);
 			})
 			.catch(err => {
@@ -418,6 +422,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 			: typeof args[0] === 'string' && !isNaN(Number(args[0])) ? Number(args[0]) // E.g., http2 module passes port as string.
 			: options.port;
 		const host = typeof args[1] === 'string' ? args[1] : options.host;
+		let tlsSocket: tls.TLSSocket;
 		if (options.socket) {
 			if (!options.secureContext) {
 				options.secureContext = tls.createSecureContext(options);
@@ -449,6 +454,12 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 					for (const cert of caCertificates?.certs || []) {
 						options!.secureContext!.context.addCACert(cert);
 					}
+					if (options?.timeout) {
+						socket.setTimeout(options.timeout);
+						socket.once('timeout', () => {
+							tlsSocket.emit('timeout');
+						});
+					}
 					socket.connect(port!, host!);
 				})
 				.catch(err => {
@@ -456,12 +467,13 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 				});
 		}
 		if (typeof args[1] === 'string') {
-			return original(port!, host!, options, secureConnectListener);
+			tlsSocket = original(port!, host!, options, secureConnectListener);
 		} else if (typeof args[0] === 'number' || typeof args[0] === 'string' && !isNaN(Number(args[0]))) {
-			return original(port!, options, secureConnectListener);
+			tlsSocket = original(port!, options, secureConnectListener);
 		} else {
-			return original(options, secureConnectListener);
+			tlsSocket = original(options, secureConnectListener);
 		}
+		return tlsSocket;
 	}
 	return connect;
 }

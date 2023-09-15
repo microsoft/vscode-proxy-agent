@@ -52,4 +52,41 @@ Host: test-https-server
 		const response = await p;
 		assert.ok(response.startsWith('HTTP/1.1 200 OK'), `Unexpected response: ${response}`);
 	});
+
+	it('net.connect() should support timeout', async () => {
+		const netPatched = {
+			...net,
+			...createNetPatch(directProxyAgentParams, net),
+		};
+		const socket = netPatched.connect({
+			host: 'test-https-server',
+			port: 808,
+			timeout: 500,
+		});
+		const timeout = new Promise((resolve, reject) => {
+			socket.on('timeout', resolve);
+			socket.on('error', reject);
+			socket.on('end', reject);
+		});
+		await Promise.race([timeout, new Promise((_, reject) => setTimeout(() => reject(new Error('no timeout event received')), 1000))]);
+	});
+
+	it('tls.connect() should support timeout', async () => {
+		const tlsPatched = {
+			...tls,
+			...createTlsPatch(directProxyAgentParams, tls),
+		};
+		const socket = tlsPatched.connect({
+			host: 'test-https-server',
+			port: 443,
+			servername: 'test-https-server', // for SNI
+			timeout: 500,
+		});
+		const timeout = new Promise((resolve, reject) => {
+			socket.on('timeout', resolve);
+			socket.on('error', reject);
+			socket.on('end', reject);
+		});
+		await Promise.race([timeout, new Promise((_, reject) => setTimeout(() => reject(new Error('no timeout event received')), 1000))]);
+	});
 });
