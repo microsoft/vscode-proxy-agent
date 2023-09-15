@@ -122,7 +122,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			timeout = setTimeout(logEvent, 10 * 60 * 1000);
 		}
 
-		const stackText = getLogLevel() === LogLevel.Trace ? '\n' + new Error('Error for stack trace').stack : '';
+		const stackText = ''; // getLogLevel() === LogLevel.Trace ? '\n' + new Error('Error for stack trace').stack : '';
 
 		useSystemCertificates(params, flags.useSystemCertificates, opts, () => {
 			useProxySettings(useHostProxy, flags.useProxySettings, req, opts, url, stackText, callback);
@@ -365,10 +365,12 @@ function patchNetConnect(params: ProxyAgentParams, original: typeof net.connect)
     function connect(port: number, host?: string, connectionListener?: () => void): net.Socket;
     function connect(path: string, connectionListener?: () => void): net.Socket;
 	function connect(...args: any[]): net.Socket {
+		if (params.getLogLevel() === LogLevel.Trace) {
+			params.log(LogLevel.Trace, 'ProxyResolver#net.connect', toLogString(args));
+		}
 		if (!params.getSystemCertificatesV2()) {
 			return original.apply(null, arguments as any);
 		}
-		params.log(LogLevel.Trace, 'ProxyResolver#net.connect', params.getLogLevel() === LogLevel.Trace ? toLogString(args) : undefined);
 		const socket = new net.Socket();
 		(socket as any).connecting = true;
 		getCaCertificates(params)
@@ -399,11 +401,13 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 	function connect(port: number, host?: string, options?: tls.ConnectionOptions, secureConnectListener?: () => void): tls.TLSSocket;
 	function connect(port: number, options?: tls.ConnectionOptions, secureConnectListener?: () => void): tls.TLSSocket;
 	function connect(...args: any[]): tls.TLSSocket {
+		if (params.getLogLevel() === LogLevel.Trace) {
+			params.log(LogLevel.Trace, 'ProxyResolver#tls.connect', toLogString(args));
+		}
 		let options: tls.ConnectionOptions | undefined = args.find(arg => arg && typeof arg === 'object');
 		if (!params.getSystemCertificatesV2() || options?.ca) {
 			return original.apply(null, arguments as any);
 		}
-		params.log(LogLevel.Trace, 'ProxyResolver#tls.connect', params.getLogLevel() === LogLevel.Trace ? toLogString(args) : undefined);
 		let secureConnectListener: (() => void) | undefined = args.find(arg => typeof arg === 'function');
 		if (!options) {
 			options = {};
