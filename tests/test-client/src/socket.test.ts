@@ -1,7 +1,7 @@
 import * as net from 'net';
 import * as tls from 'tls';
 import * as dns from 'dns';
-import { createNetPatch, createTlsPatch } from '../../../src/index';
+import { createNetPatch, createTlsPatch, toLogString } from '../../../src/index';
 import { directProxyAgentParams } from './utils';
 import * as assert from 'assert';
 
@@ -119,5 +119,22 @@ Host: test-https-server
 		const response = await p;
 		assert.ok(response.startsWith('HTTP/1.1 200 OK'), `Unexpected response: ${response}`);
 		assert.ok(lookupUsed, 'lookup() was not used');
+	});
+
+	it('toLogString() should work', async () => {
+		assert.strictEqual(toLogString([{
+			str: 'string',
+			buf: Buffer.from('buffer'),
+			obj: { a: 1 },
+			arr: [1, 2, 3],
+			undef: undefined,
+			null: null,
+			bool: true,
+			num: 1,
+			sym: Symbol('test'),
+			fn: () => {},
+			date: new Date(0),
+			obj2: Object.create(null),
+		}, () => {}]), '[{"str":"string","buf":"[object Object]","obj":"[object Object]","arr":"1,2,3","null":"null","bool":true,"num":1,"fn":"[Function: fn]","date":"1970-01-01T00:00:00.000Z","obj2":"[object Object]"}, "[Function: ]"]');
 	});
 });

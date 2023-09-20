@@ -649,11 +649,15 @@ function toErrorMessage(err: any) {
 	return err && (err.stack || err.message) || String(err);
 }
 
-function toLogString(args: any[]) {
+export function toLogString(args: any[]) {
 	return `[${args.map(arg => JSON.stringify(arg, (key, value) => {
 			const t = typeof value;
 			if (t === 'object') {
-				return !key ? value : String(value);
+				if (key) {
+					return !value || value.toString ? String(value) : Object.prototype.toString.call(value);
+				} else {
+					return value;
+				}
 			}
 			if (t === 'function') {
 				return `[Function: ${value.name}]`;
