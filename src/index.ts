@@ -654,6 +654,9 @@ export function toLogString(args: any[]) {
 			const t = typeof value;
 			if (t === 'object') {
 				if (key) {
+					if (key === '_vscodeAdditionalCaCerts' && Array.isArray(value)) {
+						return `[${value.length} certs]`;
+					}
 					return !value || value.toString ? String(value) : Object.prototype.toString.call(value);
 				} else {
 					return value;
