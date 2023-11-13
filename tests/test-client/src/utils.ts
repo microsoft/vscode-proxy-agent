@@ -5,23 +5,29 @@ import * as path from 'path';
 import * as assert from 'assert';
 
 import * as vpa from '../../..';
+import { loadSystemCertificates } from '../../../src';
 
 export const ca = [
-	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_cert.pem')),
-	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_teapot_cert.pem')),
+	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_cert.pem')).toString(),
+	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_teapot_cert.pem')).toString(),
 ];
 
 export const directProxyAgentParams: vpa.ProxyAgentParams = {
 	resolveProxy: async () => 'DIRECT',
     getProxyURL: () => undefined,
     getProxySupport: () => 'override',
-    getSystemCertificatesV1: () => false,
-    getSystemCertificatesV2: () => true,
+    addCertificatesV1: () => false,
+    addCertificatesV2: () => true,
 	log: (_level: vpa.LogLevel, message: string, ...args: any[]) => console.log(message, ...args),
 	getLogLevel: () => vpa.LogLevel.Trace,
 	proxyResolveTelemetry: () => undefined,
 	useHostProxy: true,
-	addCertificates: ca,
+	loadAdditionalCertificates: async () => [
+		...await loadSystemCertificates({
+			log: (_level: vpa.LogLevel, message: string, ...args: any[]) => console.log(message, ...args),
+		}),
+		...ca,
+	],
 	env: {},
 };
 

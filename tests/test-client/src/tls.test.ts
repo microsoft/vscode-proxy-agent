@@ -12,9 +12,9 @@ describe('TLS patch', function () {
 			...tls,
 			...createTlsPatch({
 				...directProxyAgentParams,
-				getSystemCertificatesV1: () => true,
-				getSystemCertificatesV2: () => false,
-				addCertificates: [],
+				addCertificatesV1: () => true,
+				addCertificatesV2: () => false,
+				loadAdditionalCertificates: async () => [],
 			}, tls),
 		};
 		const options: tls.ConnectionOptions = {

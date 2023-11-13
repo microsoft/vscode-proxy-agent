@@ -54,14 +54,14 @@ export interface ProxyAgentParams {
 	resolveProxy(url: string): Promise<string | undefined>;
 	getProxyURL: () => string | undefined,
 	getProxySupport: () => ProxySupportSetting,
-	getSystemCertificatesV1: () => boolean,
-	getSystemCertificatesV2: () => boolean,
+	addCertificatesV1: () => boolean,
+	addCertificatesV2: () => boolean,
+	loadAdditionalCertificates(): Promise<string[]>;
 	lookupProxyAuthorization?: LookupProxyAuthorization;
 	log(level: LogLevel, message: string, ...args: any[]): void;
 	getLogLevel(): LogLevel;
 	proxyResolveTelemetry(event: ProxyResolveEvent): void;
 	useHostProxy: boolean;
-	addCertificates: (string | Buffer)[];
 	env: NodeJS.ProcessEnv;
 }
 
@@ -117,14 +117,14 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		results = [];
 	}
 
-	function resolveProxy(flags: { useProxySettings: boolean, useSystemCertificates: boolean }, req: http.ClientRequest, opts: http.RequestOptions, url: string, callback: (proxy?: string) => void) {
+	function resolveProxy(flags: { useProxySettings: boolean, addCertificatesV1: boolean }, req: http.ClientRequest, opts: http.RequestOptions, url: string, callback: (proxy?: string) => void) {
 		if (!timeout) {
 			timeout = setTimeout(logEvent, 10 * 60 * 1000);
 		}
 
 		const stackText = ''; // getLogLevel() === LogLevel.Trace ? '\n' + new Error('Error for stack trace').stack : '';
 
-		useSystemCertificates(params, flags.useSystemCertificates, opts, () => {
+		addCertificatesV1(params, flags.addCertificatesV1, opts, () => {
 			useProxySettings(useHostProxy, flags.useProxySettings, req, opts, url, stackText, callback);
 		});
 	}
@@ -316,9 +316,9 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 			const optionsPatched = originalAgent instanceof PacProxyAgent;
 			const config = params.getProxySupport();
 			const useProxySettings = !optionsPatched && (config === 'override' || config === 'fallback' || (config === 'on' && originalAgent === undefined));
-			const useSystemCertificates = !optionsPatched && params.getSystemCertificatesV1() && isHttps && !(options as https.RequestOptions).ca;
+			const addCertificatesV1 = !optionsPatched && params.addCertificatesV1() && isHttps && !(options as https.RequestOptions).ca;
 
-			if (useProxySettings || useSystemCertificates) {
+			if (useProxySettings || addCertificatesV1) {
 				if (url) {
 					const parsed = typeof url === 'string' ? new nodeurl.URL(url) : url;
 					const urlOptions = {
@@ -334,7 +334,7 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 				} else {
 					options = { ...options };
 				}
-				const resolveP = (req: http.ClientRequest, opts: http.RequestOptions, url: string): Promise<string | undefined> => new Promise<string | undefined>(resolve => resolveProxy({ useProxySettings, useSystemCertificates }, req, opts, url, resolve));
+				const resolveP = (req: http.ClientRequest, opts: http.RequestOptions, url: string): Promise<string | undefined> => new Promise<string | undefined>(resolve => resolveProxy({ useProxySettings, addCertificatesV1 }, req, opts, url, resolve));
 				const host = options.hostname || options.host;
 				const isLocalhost = !host || host === 'localhost' || host === '127.0.0.1'; // Avoiding https://github.com/microsoft/vscode/issues/120354
 				options.agent = createPacProxyAgent(resolveP, {
@@ -368,12 +368,12 @@ function patchNetConnect(params: ProxyAgentParams, original: typeof net.connect)
 		if (params.getLogLevel() === LogLevel.Trace) {
 			params.log(LogLevel.Trace, 'ProxyResolver#net.connect', toLogString(args));
 		}
-		if (!params.getSystemCertificatesV2()) {
+		if (!params.addCertificatesV2()) {
 			return original.apply(null, arguments as any);
 		}
 		const socket = new net.Socket();
 		(socket as any).connecting = true;
-		getCaCertificates(params)
+		getOrLoadAdditionalCertificates(params)
 			.then(() => {
 				const options: net.NetConnectOpts | undefined = args.find(arg => arg && typeof arg === 'object');
 				if (options?.timeout) {
@@ -405,7 +405,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 			params.log(LogLevel.Trace, 'ProxyResolver#tls.connect', toLogString(args));
 		}
 		let options: tls.ConnectionOptions | undefined = args.find(arg => arg && typeof arg === 'object');
-		if (!params.getSystemCertificatesV2() || options?.ca) {
+		if (!params.addCertificatesV2() || options?.ca) {
 			return original.apply(null, arguments as any);
 		}
 		let secureConnectListener: (() => void) | undefined = args.find(arg => typeof arg === 'function');
@@ -431,17 +431,17 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 			if (!options.secureContext) {
 				options.secureContext = tls.createSecureContext(options);
 			}
-			if (!_caCertificateValues) {
-				params.log(LogLevel.Trace, 'ProxyResolver#connect waiting for existing socket connect');
+			if (!_certificates) {
+				params.log(LogLevel.Trace, 'ProxyResolver#tls.connect waiting for existing socket connect');
 				options.socket.once('connect' , () => {
-					params.log(LogLevel.Trace, 'ProxyResolver#connect got existing socket connect - adding certs');
-					for (const cert of _caCertificateValues || []) {
+					params.log(LogLevel.Trace, 'ProxyResolver#tls.connect got existing socket connect - adding certs');
+					for (const cert of _certificates || []) {
 						options!.secureContext!.context.addCACert(cert);
 					}
 				});
 			} else {
-				params.log(LogLevel.Trace, 'ProxyResolver#connect existing socket already connected - adding certs');
-				for (const cert of _caCertificateValues) {
+				params.log(LogLevel.Trace, 'ProxyResolver#tls.connect existing socket already connected - adding certs');
+				for (const cert of _certificates) {
 					options!.secureContext!.context.addCACert(cert);
 				}
 			}
@@ -449,13 +449,13 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 			if (!options.secureContext) {
 				options.secureContext = tls.createSecureContext(options);
 			}
-			params.log(LogLevel.Trace, 'ProxyResolver#connect creating unconnected socket');
+			params.log(LogLevel.Trace, 'ProxyResolver#tls.connect creating unconnected socket');
 			const socket = options.socket = new net.Socket();
 			(socket as any).connecting = true;
-			getCaCertificates(params)
+			getOrLoadAdditionalCertificates(params)
 				.then(caCertificates => {
-					params.log(LogLevel.Trace, 'ProxyResolver#connect adding certs before connecting socket');
-					for (const cert of caCertificates?.certs || []) {
+					params.log(LogLevel.Trace, 'ProxyResolver#tls.connect adding certs before connecting socket');
+					for (const cert of caCertificates) {
 						options!.secureContext!.context.addCACert(cert);
 					}
 					if (options?.timeout) {
@@ -471,7 +471,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 					});
 				})
 				.catch(err => {
-					params.log(LogLevel.Error, 'ProxyResolver#connect', toErrorMessage(err));
+					params.log(LogLevel.Error, 'ProxyResolver#tls.connect', toErrorMessage(err));
 				});
 		}
 		if (typeof args[1] === 'string') {
@@ -499,67 +499,73 @@ function patchCreateSecureContext(original: typeof tls.createSecureContext): typ
 	};
 }
 
-function useSystemCertificates(params: ProxyAgentParams, useSystemCertificates: boolean, opts: http.RequestOptions, callback: () => void) {
-	if (useSystemCertificates) {
-		getCaCertificates(params)
+function addCertificatesV1(params: ProxyAgentParams, addCertificatesV1: boolean, opts: http.RequestOptions, callback: () => void) {
+	if (addCertificatesV1) {
+		getOrLoadAdditionalCertificates(params)
 			.then(caCertificates => {
-				if (caCertificates) {
-					if (caCertificates.append) {
-						(opts as SecureContextOptionsPatch)._vscodeAdditionalCaCerts = caCertificates.certs;
-					} else {
-						(opts as https.RequestOptions).ca = caCertificates.certs;
-					}
-				}
+				(opts as SecureContextOptionsPatch)._vscodeAdditionalCaCerts = caCertificates;
 				callback();
 			})
 			.catch(err => {
-				params.log(LogLevel.Error, 'ProxyResolver#useSystemCertificates', toErrorMessage(err));
+				params.log(LogLevel.Error, 'ProxyResolver#addCertificatesV1', toErrorMessage(err));
 			});
 	} else {
 		callback();
 	}
 }
 
-let _caCertificates: ReturnType<typeof readCaCertificates> | Promise<undefined> | undefined;
-let _caCertificateValues: (string | Buffer)[] | undefined;
-async function getCaCertificates(params: ProxyAgentParams) {
-	if (!_caCertificates) {
-		_caCertificates = readCaCertificates()
-			.then(res => {
-				const certs = (res?.certs || []).concat(params.addCertificates);
-				params.log(LogLevel.Debug, 'ProxyResolver#getCaCertificates count', certs.length);
+let _certificatesPromise: Promise<string[]> | undefined;
+let _certificates: string[] | undefined;
+async function getOrLoadAdditionalCertificates(params: ProxyAgentParams) {
+	if (!_certificatesPromise) {
+		_certificatesPromise = (async () => {
+			return _certificates = await params.loadAdditionalCertificates();
+		})();
+	}
+	return _certificatesPromise;
+}
+
+export interface CertificateParams {
+	log(level: LogLevel, message: string, ...args: any[]): void;
+}
+
+let _systemCertificatesPromise: Promise<string[]> | undefined;
+export async function loadSystemCertificates(params: CertificateParams) {
+	if (!_systemCertificatesPromise) {
+		_systemCertificatesPromise = (async () => {
+			try {
+				const certs = await readSystemCertificates();
+				params.log(LogLevel.Debug, 'ProxyResolver#loadSystemCertificates count', certs.length);
 				const now = Date.now();
-				_caCertificateValues = certs
+				const filtered = certs
 					.filter(cert => {
 						try {
 							const parsedCert = new crypto.X509Certificate(cert);
 							const parsedDate = Date.parse(parsedCert.validTo);
 							return isNaN(parsedDate) || parsedDate > now;
 						} catch (err) {
-							params.log(LogLevel.Debug, 'ProxyResolver#getCaCertificates parse error', toErrorMessage(err));
+							params.log(LogLevel.Debug, 'ProxyResolver#loadSystemCertificates parse error', toErrorMessage(err));
 							return false;
 						}
 					});
-				params.log(LogLevel.Debug, 'ProxyResolver#getCaCertificates count filtered', _caCertificateValues.length);
-				return _caCertificateValues.length > 0 ? {
-					certs: _caCertificateValues,
-					append: res?.append !== false,
-				} : undefined;
-			})
-			.catch(err => {
-				params.log(LogLevel.Error, 'ProxyResolver#getCaCertificates error', toErrorMessage(err));
-				return undefined;
-			});
+				params.log(LogLevel.Debug, 'ProxyResolver#loadSystemCertificates count filtered', filtered.length);
+				return filtered;
+			} catch (err) {
+				params.log(LogLevel.Error, 'ProxyResolver#loadSystemCertificates error', toErrorMessage(err));
+				return [];
+			}
+		})();
 	}
-	return _caCertificates;
+	return _systemCertificatesPromise;
 }
 
 export function resetCaches() {
-	_caCertificates = undefined;
-	_caCertificateValues = undefined;
+	_certificatesPromise = undefined;
+	_certificates = undefined;
+	_systemCertificatesPromise = undefined;
 }
 
-async function readCaCertificates(): Promise<{ append: boolean; certs: (string | Buffer)[] } | undefined> {
+async function readSystemCertificates(): Promise<string[]> {
 	if (process.platform === 'win32') {
 		return readWindowsCaCertificates();
 	}
@@ -569,7 +575,7 @@ async function readCaCertificates(): Promise<{ append: boolean; certs: (string |
 	if (process.platform === 'linux') {
 		return readLinuxCaCertificates();
 	}
-	return undefined;
+	return [];
 }
 
 async function readWindowsCaCertificates() {
@@ -588,10 +594,7 @@ async function readWindowsCaCertificates() {
 	}
 
 	const certs = new Set(ders.map(derToPem));
-	return {
-		certs: Array.from(certs),
-		append: true
-	};
+	return Array.from(certs);
 }
 
 async function readMacCaCertificates() {
@@ -605,10 +608,7 @@ async function readMacCaCertificates() {
 	});
 	const certs = new Set(stdout.split(/(?=-----BEGIN CERTIFICATE-----)/g)
 		.filter(pem => !!pem.length));
-	return {
-		certs: Array.from(certs),
-		append: true
-	};
+	return Array.from(certs);
 }
 
 const linuxCaCertificatePaths = [
@@ -622,17 +622,14 @@ async function readLinuxCaCertificates() {
 			const content = await fs.promises.readFile(certPath, { encoding: 'utf8' });
 			const certs = new Set(content.split(/(?=-----BEGIN CERTIFICATE-----)/g)
 				.filter(pem => !!pem.length));
-			return {
-				certs: Array.from(certs),
-				append: false
-			};
+			return Array.from(certs);
 		} catch (err: any) {
 			if (err?.code !== 'ENOENT') {
 				throw err;
 			}
 		}
 	}
-	return undefined;
+	return [];
 }
 
 function derToPem(blob: Buffer) {
