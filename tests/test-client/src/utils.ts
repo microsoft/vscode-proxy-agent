@@ -18,14 +18,12 @@ export const directProxyAgentParams: vpa.ProxyAgentParams = {
     getProxySupport: () => 'override',
     addCertificatesV1: () => false,
     addCertificatesV2: () => true,
-	log: (_level: vpa.LogLevel, message: string, ...args: any[]) => console.log(message, ...args),
+	log: console,
 	getLogLevel: () => vpa.LogLevel.Trace,
 	proxyResolveTelemetry: () => undefined,
 	useHostProxy: true,
 	loadAdditionalCertificates: async () => [
-		...await loadSystemCertificates({
-			log: (_level: vpa.LogLevel, message: string, ...args: any[]) => console.log(message, ...args),
-		}),
+		...await loadSystemCertificates({ log: console }),
 		...ca,
 	],
 	env: {},

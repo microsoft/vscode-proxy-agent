@@ -50,6 +50,14 @@ const maxCacheEntries = 5000; // Cache can grow twice that much due to 'oldCache
 
 export type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate: string | string[] | undefined, state: Record<string, any>) => Promise<string | undefined>;
 
+export interface Log {
+	trace(message: string, ...args: any[]): void;
+	debug(message: string, ...args: any[]): void;
+	info(message: string, ...args: any[]): void;
+	warn(message: string, ...args: any[]): void;
+	error(message: string | Error, ...args: any[]): void;
+}
+
 export interface ProxyAgentParams {
 	resolveProxy(url: string): Promise<string | undefined>;
 	getProxyURL: () => string | undefined,
@@ -58,7 +66,7 @@ export interface ProxyAgentParams {
 	addCertificatesV2: () => boolean,
 	loadAdditionalCertificates(): Promise<string[]>;
 	lookupProxyAuthorization?: LookupProxyAuthorization;
-	log(level: LogLevel, message: string, ...args: any[]): void;
+	log: Log;
 	getLogLevel(): LogLevel;
 	proxyResolveTelemetry(event: ProxyResolveEvent): void;
 	useHostProxy: boolean;
@@ -96,7 +104,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			oldCache = cache;
 			cache = new Map();
 			cacheRolls++;
-			log(LogLevel.Debug, 'ProxyResolver#cacheProxy cacheRolls', cacheRolls);
+			log.debug('ProxyResolver#cacheProxy cacheRolls', cacheRolls);
 		}
 	}
 
@@ -142,7 +150,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '::ffff:127.0.0.1') {
 			localhostCount++;
 			callback('DIRECT');
-			log(LogLevel.Debug, 'ProxyResolver#resolveProxy localhost', url, 'DIRECT', stackText);
+			log.debug('ProxyResolver#resolveProxy localhost', url, 'DIRECT', stackText);
 			return;
 		}
 
@@ -151,7 +159,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		if (typeof hostname === 'string' && envNoProxy(hostname, String(parsedUrl.port || defaultPort))) {
 			envNoProxyCount++;
 			callback('DIRECT');
-			log(LogLevel.Debug, 'ProxyResolver#resolveProxy envNoProxy', url, 'DIRECT', stackText);
+			log.debug('ProxyResolver#resolveProxy envNoProxy', url, 'DIRECT', stackText);
 			return;
 		}
 
@@ -159,14 +167,14 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		if (settingsProxy) {
 			settingsCount++;
 			callback(settingsProxy);
-			log(LogLevel.Debug, 'ProxyResolver#resolveProxy settings', url, settingsProxy, stackText);
+			log.debug('ProxyResolver#resolveProxy settings', url, settingsProxy, stackText);
 			return;
 		}
 
 		if (envProxy) {
 			envCount++;
 			callback(envProxy);
-			log(LogLevel.Debug, 'ProxyResolver#resolveProxy env', url, envProxy, stackText);
+			log.debug('ProxyResolver#resolveProxy env', url, envProxy, stackText);
 			return;
 		}
 
@@ -176,13 +184,13 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			cacheCount++;
 			collectResult(results, proxy, parsedUrl.protocol === 'https:' ? 'HTTPS' : 'HTTP', req);
 			callback(proxy);
-			log(LogLevel.Debug, 'ProxyResolver#resolveProxy cached', url, proxy, stackText);
+			log.debug('ProxyResolver#resolveProxy cached', url, proxy, stackText);
 			return;
 		}
 
 		if (!useHostProxy) {
 			callback('DIRECT');
-			log(LogLevel.Debug, 'ProxyResolver#resolveProxy unconfigured', url, 'DIRECT', stackText);
+			log.debug('ProxyResolver#resolveProxy unconfigured', url, 'DIRECT', stackText);
 			return;
 		}
 
@@ -194,7 +202,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 					collectResult(results, proxy, parsedUrl.protocol === 'https:' ? 'HTTPS' : 'HTTP', req);
 				}
 				callback(proxy);
-				log(LogLevel.Debug, 'ProxyResolver#resolveProxy', url, proxy, stackText);
+				log.debug('ProxyResolver#resolveProxy', url, proxy, stackText);
 			}).then(() => {
 				count++;
 				duration = Date.now() - start + duration;
@@ -202,7 +210,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 				errorCount++;
 				const fallback: string | undefined = cache.values().next().value; // fall back to any proxy (https://github.com/microsoft/vscode/issues/122825)
 				callback(fallback);
-				log(LogLevel.Error, 'ProxyResolver#resolveProxy', fallback, toErrorMessage(err), stackText);
+				log.error('ProxyResolver#resolveProxy', fallback, toErrorMessage(err), stackText);
 			});
 	}
 
@@ -366,7 +374,7 @@ function patchNetConnect(params: ProxyAgentParams, original: typeof net.connect)
     function connect(path: string, connectionListener?: () => void): net.Socket;
 	function connect(...args: any[]): net.Socket {
 		if (params.getLogLevel() === LogLevel.Trace) {
-			params.log(LogLevel.Trace, 'ProxyResolver#net.connect', toLogString(args));
+			params.log.trace('ProxyResolver#net.connect', toLogString(args));
 		}
 		if (!params.addCertificatesV2()) {
 			return original.apply(null, arguments as any);
@@ -382,7 +390,7 @@ function patchNetConnect(params: ProxyAgentParams, original: typeof net.connect)
 				socket.connect.apply(socket, arguments as any);
 			})
 			.catch(err => {
-				params.log(LogLevel.Error, 'ProxyResolver#net.connect', toErrorMessage(err));
+				params.log.error('ProxyResolver#net.connect', toErrorMessage(err));
 			});
 		return socket;
 	}
@@ -402,7 +410,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 	function connect(port: number, options?: tls.ConnectionOptions, secureConnectListener?: () => void): tls.TLSSocket;
 	function connect(...args: any[]): tls.TLSSocket {
 		if (params.getLogLevel() === LogLevel.Trace) {
-			params.log(LogLevel.Trace, 'ProxyResolver#tls.connect', toLogString(args));
+			params.log.trace('ProxyResolver#tls.connect', toLogString(args));
 		}
 		let options: tls.ConnectionOptions | undefined = args.find(arg => arg && typeof arg === 'object');
 		if (!params.addCertificatesV2() || options?.ca) {
@@ -432,15 +440,15 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 				options.secureContext = tls.createSecureContext(options);
 			}
 			if (!_certificates) {
-				params.log(LogLevel.Trace, 'ProxyResolver#tls.connect waiting for existing socket connect');
+				params.log.trace('ProxyResolver#tls.connect waiting for existing socket connect');
 				options.socket.once('connect' , () => {
-					params.log(LogLevel.Trace, 'ProxyResolver#tls.connect got existing socket connect - adding certs');
+					params.log.trace('ProxyResolver#tls.connect got existing socket connect - adding certs');
 					for (const cert of _certificates || []) {
 						options!.secureContext!.context.addCACert(cert);
 					}
 				});
 			} else {
-				params.log(LogLevel.Trace, 'ProxyResolver#tls.connect existing socket already connected - adding certs');
+				params.log.trace('ProxyResolver#tls.connect existing socket already connected - adding certs');
 				for (const cert of _certificates) {
 					options!.secureContext!.context.addCACert(cert);
 				}
@@ -449,12 +457,12 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 			if (!options.secureContext) {
 				options.secureContext = tls.createSecureContext(options);
 			}
-			params.log(LogLevel.Trace, 'ProxyResolver#tls.connect creating unconnected socket');
+			params.log.trace('ProxyResolver#tls.connect creating unconnected socket');
 			const socket = options.socket = new net.Socket();
 			(socket as any).connecting = true;
 			getOrLoadAdditionalCertificates(params)
 				.then(caCertificates => {
-					params.log(LogLevel.Trace, 'ProxyResolver#tls.connect adding certs before connecting socket');
+					params.log.trace('ProxyResolver#tls.connect adding certs before connecting socket');
 					for (const cert of caCertificates) {
 						options!.secureContext!.context.addCACert(cert);
 					}
@@ -471,7 +479,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 					});
 				})
 				.catch(err => {
-					params.log(LogLevel.Error, 'ProxyResolver#tls.connect', toErrorMessage(err));
+					params.log.error('ProxyResolver#tls.connect', toErrorMessage(err));
 				});
 		}
 		if (typeof args[1] === 'string') {
@@ -507,7 +515,7 @@ function addCertificatesV1(params: ProxyAgentParams, addCertificatesV1: boolean,
 				callback();
 			})
 			.catch(err => {
-				params.log(LogLevel.Error, 'ProxyResolver#addCertificatesV1', toErrorMessage(err));
+				params.log.error('ProxyResolver#addCertificatesV1', toErrorMessage(err));
 			});
 	} else {
 		callback();
@@ -526,7 +534,7 @@ async function getOrLoadAdditionalCertificates(params: ProxyAgentParams) {
 }
 
 export interface CertificateParams {
-	log(level: LogLevel, message: string, ...args: any[]): void;
+	log: Log;
 }
 
 let _systemCertificatesPromise: Promise<string[]> | undefined;
@@ -535,7 +543,7 @@ export async function loadSystemCertificates(params: CertificateParams) {
 		_systemCertificatesPromise = (async () => {
 			try {
 				const certs = await readSystemCertificates();
-				params.log(LogLevel.Debug, 'ProxyResolver#loadSystemCertificates count', certs.length);
+				params.log.debug('ProxyResolver#loadSystemCertificates count', certs.length);
 				const now = Date.now();
 				const filtered = certs
 					.filter(cert => {
@@ -544,14 +552,14 @@ export async function loadSystemCertificates(params: CertificateParams) {
 							const parsedDate = Date.parse(parsedCert.validTo);
 							return isNaN(parsedDate) || parsedDate > now;
 						} catch (err) {
-							params.log(LogLevel.Debug, 'ProxyResolver#loadSystemCertificates parse error', toErrorMessage(err));
+							params.log.debug('ProxyResolver#loadSystemCertificates parse error', toErrorMessage(err));
 							return false;
 						}
 					});
-				params.log(LogLevel.Debug, 'ProxyResolver#loadSystemCertificates count filtered', filtered.length);
+				params.log.debug('ProxyResolver#loadSystemCertificates count filtered', filtered.length);
 				return filtered;
 			} catch (err) {
-				params.log(LogLevel.Error, 'ProxyResolver#loadSystemCertificates error', toErrorMessage(err));
+				params.log.error('ProxyResolver#loadSystemCertificates error', toErrorMessage(err));
 				return [];
 			}
 		})();
