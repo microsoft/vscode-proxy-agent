@@ -659,8 +659,11 @@ export function toLogString(args: any[]) {
 			const t = typeof value;
 			if (t === 'object') {
 				if (key) {
-					if (key === '_vscodeAdditionalCaCerts' && Array.isArray(value)) {
+					if ((key === 'ca' || key === '_vscodeAdditionalCaCerts') && Array.isArray(value)) {
 						return `[${value.length} certs]`;
+					}
+					if (key === 'ca' && (typeof value === 'string' || Buffer.isBuffer(value))) {
+						return `[${(value.toString().match(/-----BEGIN CERTIFICATE-----/g) || []).length} certs]`;
 					}
 					return !value || value.toString ? String(value) : Object.prototype.toString.call(value);
 				} else {
