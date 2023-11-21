@@ -676,6 +676,10 @@ export function toLogString(args: any[]) {
 			if (t === 'bigint') {
 				return String(value);
 			}
+			if (t === 'string' && value.length > 25) {
+				const len = `[${value.length} chars]`;
+				return `${value.substr(0, 25 - len.length)}${len}`;
+			}
 			return value;
 		})).join(', ')}]`;
 }
