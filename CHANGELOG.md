@@ -1,8 +1,11 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.19.0]
+- Also check for /etc/ssl/ca-bundle.pem ([microsoft/vscode#203847](https://github.com/microsoft/vscode/issues/203847))
+
 ## [0.18.0]
-- Async callback for additional certificates ([microsoft/vscode#9176](https://github.com/microsoft/vscode-remote-release/issues/9176))
+- Async callback for additional certificates ([microsoft/vscode-remote-release#9176](https://github.com/microsoft/vscode-remote-release/issues/9176))
 
 ## [0.17.0]
 - Add auth callback and Kerberos test setup ([microsoft/vscode#187456](https://github.com/microsoft/vscode/issues/187456))

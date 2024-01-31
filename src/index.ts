@@ -620,8 +620,9 @@ async function readMacCaCertificates() {
 }
 
 const linuxCaCertificatePaths = [
-	'/etc/ssl/certs/ca-certificates.crt',
-	'/etc/ssl/certs/ca-bundle.crt',
+	'/etc/ssl/certs/ca-certificates.crt', // Debian / Ubuntu / Alpine / Fedora
+	'/etc/ssl/certs/ca-bundle.crt', // Fedora
+	'/etc/ssl/ca-bundle.pem', // OpenSUSE
 ];
 
 async function readLinuxCaCertificates() {
