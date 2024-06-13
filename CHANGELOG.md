@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.20.0]
+- Update socks to avoid CVE-2024-29415
+
 ## [0.19.0]
 - Also check for /etc/ssl/ca-bundle.pem ([microsoft/vscode#203847](https://github.com/microsoft/vscode/issues/203847))
 
