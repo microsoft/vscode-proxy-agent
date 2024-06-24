@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.21.0]
+- Add NO_PROXY setting to be passed from config ([microsoft/vscode#211956](https://github.com/microsoft/vscode/issues/211956))
+
 ## [0.20.0]
 - Update socks to avoid CVE-2024-29415
 
