@@ -684,3 +684,10 @@ export function toLogString(args: any[]) {
 			return value;
 		})).join(', ')}]`;
 }
+
+/**
+ * Certificates for testing. These are not automatically used, but can be added in
+ * ProxyAgentParams#loadAdditionalCertificates(). This just provides a shared array
+ * between production code and tests.
+ */
+export const testCertificates: string[] = [];
