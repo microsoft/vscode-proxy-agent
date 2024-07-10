@@ -1,0 +1,50 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "watch",
+            "dependsOn": [
+                "npm: pac-server:run",
+                "npm: proxy-1:access-log",
+                "npm: proxy-2:access-log"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+        {
+            "type": "npm",
+            "script": "pac-server:run",
+            "group": "build",
+            "isBackground": true,
+            "label": "npm: pac-server:run",
+            "presentation": {
+                "group": "watch"
+            }
+        },
+        {
+            "type": "npm",
+            "script": "proxy-1:access-log",
+            "group": "build",
+            "isBackground": true,
+            "label": "npm: proxy-1:access-log",
+            "presentation": {
+                "group": "watch"
+            }
+        },
+        {
+            "type": "npm",
+            "script": "proxy-2:access-log",
+            "group": "build",
+            "isBackground": true,
+            "label": "npm: proxy-2:access-log",
+            "presentation": {
+                "group": "watch"
+            }
+        }
+    ]
+}
