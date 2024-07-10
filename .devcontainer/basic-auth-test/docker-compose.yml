@@ -1,0 +1,29 @@
+version: '3.4'
+
+services:
+    devcontainer:
+        image: mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm
+        volumes:
+            - ../../..:/workspaces
+        ports:
+            - "127.0.0.1:3333:3333"
+    basic-auth-proxy-1:
+        restart: always
+        build:
+            context: basic-auth-proxy
+            dockerfile: Dockerfile
+            args:
+                - PROXY_USERNAME=user1
+                - PROXY_PASSWORD=pass1
+        ports:
+            - "127.0.0.1:3111:3128"
+    basic-auth-proxy-2:
+        restart: always
+        build:
+            context: basic-auth-proxy
+            dockerfile: Dockerfile
+            args:
+                - PROXY_USERNAME=user2
+                - PROXY_PASSWORD=pass2
+        ports:
+            - "127.0.0.1:3122:3128"

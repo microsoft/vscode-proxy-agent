@@ -1,0 +1,10 @@
+{
+	"scripts": {
+		"proxy-1:passwd": "docker exec -it basic-auth-test-basic-auth-proxy-1-1 /bin/sh -c 'htpasswd -bc /etc/squid/.htpasswd user1 $0 && kill -9 $(cat /var/run/squid.pid)'",
+		"proxy-2:passwd": "docker exec -it basic-auth-test-basic-auth-proxy-2-1 /bin/sh -c 'htpasswd -bc /etc/squid/.htpasswd user2 $0 && kill -9 $(cat /var/run/squid.pid)'",
+
+		"pac-server:run": "node pac-server.js",
+		"proxy-1:access-log": "while true; do docker exec -it basic-auth-test-basic-auth-proxy-1-1 tail -F /var/log/squid/access.log ; sleep 1 ; done",
+		"proxy-2:access-log": "while true; do docker exec -it basic-auth-test-basic-auth-proxy-2-1 tail -F /var/log/squid/access.log ; sleep 1 ; done"
+	}
+}

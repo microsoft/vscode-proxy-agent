@@ -1,0 +1,10 @@
+{
+	"name": "Basic Auth Test",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "devcontainer",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/.devcontainer/basic-auth-test",
+	"features": {
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+	},
+	"overrideCommand": true
+}
