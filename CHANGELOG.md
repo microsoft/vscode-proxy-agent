@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.22.0]
+- Set agent protocol ([microsoft/vscode-extension-test-runner#42](https://github.com/microsoft/vscode-extension-test-runner/issues/42))
+
 ## [0.21.0]
 - Add NO_PROXY setting to be passed from config ([microsoft/vscode#211956](https://github.com/microsoft/vscode/issues/211956))
 
