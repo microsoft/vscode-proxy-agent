@@ -369,10 +369,12 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 				const resolveP = (req: http.ClientRequest, opts: http.RequestOptions, url: string): Promise<string | undefined> => new Promise<string | undefined>(resolve => resolveProxy({ useProxySettings, addCertificatesV1 }, req, opts, url, resolve));
 				const host = options.hostname || options.host;
 				const isLocalhost = !host || host === 'localhost' || host === '127.0.0.1'; // Avoiding https://github.com/microsoft/vscode/issues/120354
-				options.agent = createPacProxyAgent(resolveP, {
+				const agent = createPacProxyAgent(resolveP, {
 					originalAgent: (!useProxySettings || isLocalhost || config === 'fallback') ? originalAgent : undefined,
 					lookupProxyAuthorization: params.lookupProxyAuthorization,
-				})
+				});
+				agent.protocol = isHttps ? 'https:' : 'http:';
+				options.agent = agent
 				return original(options, callback);
 			}
 
