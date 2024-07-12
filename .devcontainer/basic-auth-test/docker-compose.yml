@@ -13,7 +13,9 @@ services:
             context: basic-auth-proxy
             dockerfile: Dockerfile
             args:
+                # [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="test credentials")]
                 - PROXY_USERNAME=user1
+                # [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="test credentials")]
                 - PROXY_PASSWORD=pass1
         ports:
             - "127.0.0.1:3111:3128"
@@ -23,7 +25,9 @@ services:
             context: basic-auth-proxy
             dockerfile: Dockerfile
             args:
+                # [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="test credentials")]
                 - PROXY_USERNAME=user2
+                # [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="test credentials")]
                 - PROXY_PASSWORD=pass2
         ports:
             - "127.0.0.1:3122:3128"
