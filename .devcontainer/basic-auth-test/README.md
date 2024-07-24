@@ -13,3 +13,4 @@ Use this dev container configuration with a different VS Code install than you w
 - To check that Electron's network stack for basic auth proxies is working, search for and install an extension from the Extensions view.
 - Use `yarn proxy-1:passwd <new password>` and `yarn proxy-2:passwd <new password>` in the dev container to update passwords.
 - Check that the 'Remember my credentials' option in the credentials dialog works as expected.
+	- Note that credentials are always remembered until VS Code is restarted (not just reloaded). If you did not check the 'Remember my credentials' option, you will be asked again after restarting VS Code.
