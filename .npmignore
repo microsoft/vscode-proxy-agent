@@ -6,3 +6,6 @@ tsconfig.json
 src
 *.tgz
 azure-pipelines
+.devcontainer
+.gitattributes
+CredScanSuppressions.json

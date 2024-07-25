@@ -1,0 +1,11 @@
+{
+	"tool": "Credential Scanner",
+	"suppressions": [
+		{
+			"file": [
+				".devcontainer/basic-auth-test/docker-compose.yml"
+			],
+			"_justification": "These are dummy credentials for testing."
+		}
+	]
+}
