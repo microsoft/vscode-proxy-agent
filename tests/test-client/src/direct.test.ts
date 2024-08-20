@@ -153,4 +153,26 @@ describe('Direct client', function () {
 		});
 		assert.ok(seen, 'Original agent not called!');
 	});
+	it('should reuse socket with agent', async function () {
+		// https://github.com/microsoft/vscode/issues/173861
+		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
+		const patchedHttps: typeof https = {
+			...https,
+			...vpa.createHttpPatch(directProxyAgentParams, https, resolveProxy),
+		} as any;
+		await testRequest(patchedHttps, {
+			hostname: 'test-https-server',
+			path: '/test-path',
+			ca,
+		});
+		await testRequest(patchedHttps, {
+			hostname: 'test-https-server',
+			path: '/test-path',
+			ca,
+		}, {
+			assertResult: (_, req) => {
+				assert.strictEqual(req.reusedSocket, true);
+			}
+		});
+	});
 });

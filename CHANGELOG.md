@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.23.0]
+- Pass on keepAlive flag ([microsoft/vscode#173861](https://github.com/microsoft/vscode/issues/173861))
+
 ## [0.22.0]
 - Set agent protocol ([microsoft/vscode-extension-test-runner#42](https://github.com/microsoft/vscode-extension-test-runner/issues/42))
 

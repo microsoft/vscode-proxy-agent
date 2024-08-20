@@ -22,6 +22,7 @@ describe('Socket client', function () {
 		});
 		socket.write(`GET /test-path-unencrypted HTTP/1.1
 Host: test-http-server
+Connection: close
 
 `);
 		const response = await p;
@@ -48,6 +49,7 @@ Host: test-http-server
 		});
 		socket.write(`GET /test-path HTTP/1.1
 Host: test-https-server
+Connection: close
 
 `);
 		const response = await p;
@@ -114,6 +116,7 @@ Host: test-https-server
 		});
 		socket.write(`GET /test-path HTTP/1.1
 Host: test-https-server
+Connection: close
 
 `);
 		const response = await p;

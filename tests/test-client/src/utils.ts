@@ -29,7 +29,7 @@ export const directProxyAgentParams: vpa.ProxyAgentParams = {
 	env: {},
 };
 
-export async function testRequest<C extends typeof https | typeof http>(client: C, options: C extends typeof https ? https.RequestOptions : http.RequestOptions, testOptions: { assertResult?: (result: any) => void; } = {}) {
+export async function testRequest<C extends typeof https | typeof http>(client: C, options: C extends typeof https ? https.RequestOptions : http.RequestOptions, testOptions: { assertResult?: (result: any, req: http.ClientRequest, res: http.IncomingMessage) => void; } = {}) {
 	return new Promise<void>((resolve, reject) => {
 		const req = client.request(options, res => {
 			if (!res.statusCode || res.statusCode < 200 || res.statusCode > 299) {
@@ -53,7 +53,7 @@ export async function testRequest<C extends typeof https | typeof http>(client: 
 					const result = JSON.parse(data);
 					assert.equal(result.status, 'OK!');
 					if (testOptions.assertResult) {
-						testOptions.assertResult(result);
+						testOptions.assertResult(result, req, res);
 					}
 					resolve();
 				} catch (err: any) {

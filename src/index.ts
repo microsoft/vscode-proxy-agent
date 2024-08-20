@@ -372,6 +372,7 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 				const agent = createPacProxyAgent(resolveP, {
 					originalAgent: (!useProxySettings || isLocalhost || config === 'fallback') ? originalAgent : undefined,
 					lookupProxyAuthorization: params.lookupProxyAuthorization,
+					keepAlive: ((originalAgent || originals.globalAgent) as { keepAlive?: boolean }).keepAlive,
 				});
 				agent.protocol = isHttps ? 'https:' : 'http:';
 				options.agent = agent
