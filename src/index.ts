@@ -372,7 +372,7 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 				const agent = createPacProxyAgent(resolveP, {
 					originalAgent: (!useProxySettings || isLocalhost || config === 'fallback') ? originalAgent : undefined,
 					lookupProxyAuthorization: params.lookupProxyAuthorization,
-					keepAlive: ((originalAgent || originals.globalAgent) as { keepAlive?: boolean }).keepAlive,
+					// keepAlive: ((originalAgent || originals.globalAgent) as { keepAlive?: boolean }).keepAlive, // Skipping due to https://github.com/microsoft/vscode/issues/228872.
 				});
 				agent.protocol = isHttps ? 'https:' : 'http:';
 				options.agent = agent

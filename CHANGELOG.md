@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [TBD]
+- Skip keepAlive flag ([microsoft/vscode#228872](https://github.com/microsoft/vscode/issues/228872))
+
 ## [0.23.0]
 - Pass on keepAlive flag ([microsoft/vscode#173861](https://github.com/microsoft/vscode/issues/173861))
 
