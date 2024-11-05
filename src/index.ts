@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as cp from 'child_process';
 import * as crypto from 'crypto';
 
-import createPacProxyAgent, { PacProxyAgent } from './agent';
+import { createPacProxyAgent, getProxyURLFromResolverResult, PacProxyAgent } from './agent';
 
 export enum LogLevel {
 	Trace,
@@ -76,7 +76,7 @@ export interface ProxyAgentParams {
 }
 
 export function createProxyResolver(params: ProxyAgentParams) {
-	const { getProxyURL, log, getLogLevel, proxyResolveTelemetry: proxyResolverTelemetry, useHostProxy, env } = params;
+	const { getProxyURL, log, proxyResolveTelemetry: proxyResolverTelemetry, env } = params;
 	let envProxy = proxyFromConfigURL(env.https_proxy || env.HTTPS_PROXY || env.http_proxy || env.HTTP_PROXY); // Not standardized.
 
 	let envNoProxy = noProxyFromEnv(env.no_proxy || env.NO_PROXY); // Not standardized.
@@ -128,7 +128,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		results = [];
 	}
 
-	function resolveProxy(flags: { useProxySettings: boolean, addCertificatesV1: boolean }, req: http.ClientRequest, opts: http.RequestOptions, url: string, callback: (proxy?: string) => void) {
+	function resolveProxyWithRequest(flags: { useProxySettings: boolean, addCertificatesV1: boolean }, req: http.ClientRequest, opts: http.RequestOptions, url: string, callback: (proxy?: string) => void) {
 		if (!timeout) {
 			timeout = setTimeout(logEvent, 10 * 60 * 1000);
 		}
@@ -136,17 +136,15 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		const stackText = ''; // getLogLevel() === LogLevel.Trace ? '\n' + new Error('Error for stack trace').stack : '';
 
 		addCertificatesV1(params, flags.addCertificatesV1, opts, () => {
-			useProxySettings(useHostProxy, flags.useProxySettings, req, opts, url, stackText, callback);
+			if (!flags.useProxySettings) {
+				callback('DIRECT');
+				return;
+			}
+			useProxySettings(url, req, stackText, callback);
 		});
 	}
 
-	function useProxySettings(useHostProxy: boolean, useProxySettings: boolean, req: http.ClientRequest, opts: http.RequestOptions, url: string, stackText: string, callback: (proxy?: string) => void) {
-
-		if (!useProxySettings) {
-			callback('DIRECT');
-			return;
-		}
-
+	function useProxySettings(url: string, req: http.ClientRequest | undefined, stackText: string, callback: (proxy?: string) => void) {
 		const parsedUrl = nodeurl.parse(url); // Coming from Node's URL, sticking with that.
 
 		const hostname = parsedUrl.hostname;
@@ -157,7 +155,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			return;
 		}
 
-		const { secureEndpoint } = opts as any;
+		const secureEndpoint = parsedUrl.protocol === 'https:';
 		const defaultPort = secureEndpoint ? 443 : 80;
 
 		// if there are any config entries present then env variables are ignored
@@ -198,13 +196,15 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		const proxy = getCachedProxy(key);
 		if (proxy) {
 			cacheCount++;
-			collectResult(results, proxy, parsedUrl.protocol === 'https:' ? 'HTTPS' : 'HTTP', req);
+			if (req) {
+				collectResult(results, proxy, secureEndpoint ? 'HTTPS' : 'HTTP', req);
+			}
 			callback(proxy);
 			log.debug('ProxyResolver#resolveProxy cached', url, proxy, stackText);
 			return;
 		}
 
-		if (!useHostProxy) {
+		if (!params.useHostProxy) {
 			callback('DIRECT');
 			log.debug('ProxyResolver#resolveProxy unconfigured', url, 'DIRECT', stackText);
 			return;
@@ -215,7 +215,9 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			.then(proxy => {
 				if (proxy) {
 					cacheProxy(key, proxy);
-					collectResult(results, proxy, parsedUrl.protocol === 'https:' ? 'HTTPS' : 'HTTP', req);
+					if (req) {
+						collectResult(results, proxy, secureEndpoint ? 'HTTPS' : 'HTTP', req);
+					}
 				}
 				callback(proxy);
 				log.debug('ProxyResolver#resolveProxy', url, proxy, stackText);
@@ -230,7 +232,18 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			});
 	}
 
-	return resolveProxy;
+	return {
+		resolveProxyWithRequest,
+		resolveProxyURL: (url: string) => new Promise<string | undefined>((resolve, reject) => {
+			useProxySettings(url, undefined, '', result => {
+				try {
+					resolve(getProxyURLFromResolverResult(result).url);
+				} catch (err) {
+					reject(err);
+				}
+			});
+		}),
+	};
 }
 
 function collectResult(results: ConnectionResult[], resolveProxy: string, connection: string, req: http.ClientRequest) {
@@ -317,7 +330,9 @@ function noProxyFromConfig(noProxy: string[]) {
 
 export type ProxySupportSetting = 'override' | 'fallback' | 'on' | 'off';
 
-export function createHttpPatch(params: ProxyAgentParams, originals: typeof http | typeof https, resolveProxy: ReturnType<typeof createProxyResolver>) {
+export type ResolveProxyWithRequest = (flags: { useProxySettings: boolean, addCertificatesV1: boolean }, req: http.ClientRequest, opts: http.RequestOptions, url: string, callback: (proxy?: string) => void) => void;
+
+export function createHttpPatch(params: ProxyAgentParams, originals: typeof http | typeof https, resolveProxy: ResolveProxyWithRequest) {
 	return {
 		get: patch(originals.get),
 		request: patch(originals.request)
@@ -551,7 +566,7 @@ function addCertificatesV1(params: ProxyAgentParams, addCertificatesV1: boolean,
 
 let _certificatesPromise: Promise<string[]> | undefined;
 let _certificates: string[] | undefined;
-async function getOrLoadAdditionalCertificates(params: ProxyAgentParams) {
+export async function getOrLoadAdditionalCertificates(params: ProxyAgentParams) {
 	if (!_certificatesPromise) {
 		_certificatesPromise = (async () => {
 			return _certificates = await params.loadAdditionalCertificates();

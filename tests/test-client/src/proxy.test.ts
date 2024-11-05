@@ -1,6 +1,6 @@
 import * as https from 'https';
 import * as assert from 'assert';
-import createPacProxyAgent from '../../../src/agent';
+import { createPacProxyAgent } from '../../../src/agent';
 import { testRequest, ca } from './utils';
 
 describe('Proxied client', function () {
