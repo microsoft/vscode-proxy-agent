@@ -1,7 +1,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import * as vpa from '../../..';
-import createPacProxyAgent from '../../../src/agent';
+import { createPacProxyAgent } from '../../../src/agent';
 import { testRequest, ca, directProxyAgentParams } from './utils';
 import * as assert from 'assert';
 
@@ -66,7 +66,7 @@ describe('Direct client', function () {
 
 	it('should override original agent', async function () {
 		// https://github.com/microsoft/vscode/issues/117054
-		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
 			...vpa.createHttpPatch(directProxyAgentParams, https, resolveProxy),
@@ -87,7 +87,7 @@ describe('Direct client', function () {
 	});
 	it('should use original agent 1', async function () {
 		// https://github.com/microsoft/vscode/issues/117054 avoiding https://github.com/microsoft/vscode/issues/120354
-		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
 			...vpa.createHttpPatch(directProxyAgentParams, https, resolveProxy),
@@ -108,7 +108,7 @@ describe('Direct client', function () {
 	});
 	it('should use original agent 2', async function () {
 		// https://github.com/microsoft/vscode/issues/117054
-		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
 			...vpa.createHttpPatch({
@@ -131,7 +131,7 @@ describe('Direct client', function () {
 		assert.ok(seen, 'Original agent not called!');
 	});
 	it('should use original agent 3', async function () {
-		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
 			...vpa.createHttpPatch({
@@ -156,7 +156,7 @@ describe('Direct client', function () {
 	it.skip('should reuse socket with agent', async function () {
 		// Skipping due to https://github.com/microsoft/vscode/issues/228872.
 		// https://github.com/microsoft/vscode/issues/173861
-		const resolveProxy = vpa.createProxyResolver(directProxyAgentParams);
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
 			...https,
 			...vpa.createHttpPatch(directProxyAgentParams, https, resolveProxy),
