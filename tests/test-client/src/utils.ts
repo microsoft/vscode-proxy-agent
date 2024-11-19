@@ -12,12 +12,14 @@ export const ca = [
 	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_teapot_cert.pem')).toString(),
 ];
 
+export const unusedCa = fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_unused_cert.pem')).toString();
+
 export const directProxyAgentParams: vpa.ProxyAgentParams = {
 	resolveProxy: async () => 'DIRECT',
-    getProxyURL: () => undefined,
-    getProxySupport: () => 'override',
-    addCertificatesV1: () => false,
-    addCertificatesV2: () => true,
+	getProxyURL: () => undefined,
+	getProxySupport: () => 'override',
+	addCertificatesV1: () => false,
+	addCertificatesV2: () => true,
 	log: console,
 	getLogLevel: () => vpa.LogLevel.Trace,
 	proxyResolveTelemetry: () => undefined,
@@ -29,7 +31,13 @@ export const directProxyAgentParams: vpa.ProxyAgentParams = {
 	env: {},
 };
 
-export async function testRequest<C extends typeof https | typeof http>(client: C, options: C extends typeof https ? https.RequestOptions : http.RequestOptions, testOptions: { assertResult?: (result: any, req: http.ClientRequest, res: http.IncomingMessage) => void; } = {}) {
+export const directProxyAgentParamsV1: vpa.ProxyAgentParams = {
+	...directProxyAgentParams,
+	addCertificatesV1: () => true,
+	addCertificatesV2: () => false,
+};
+
+export async function testRequest<C extends typeof https | typeof http>(client: C, options: C extends typeof https ? (https.RequestOptions & vpa.SecureContextOptionsPatch) : http.RequestOptions, testOptions: { assertResult?: (result: any, req: http.ClientRequest, res: http.IncomingMessage) => void; } = {}) {
 	return new Promise<void>((resolve, reject) => {
 		const req = client.request(options, res => {
 			if (!res.statusCode || res.statusCode < 200 || res.statusCode > 299) {

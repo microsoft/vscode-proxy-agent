@@ -363,7 +363,7 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 			const optionsPatched = originalAgent instanceof PacProxyAgent;
 			const config = params.getProxySupport();
 			const useProxySettings = !optionsPatched && (config === 'override' || config === 'fallback' || (config === 'on' && originalAgent === undefined));
-			const addCertificatesV1 = !optionsPatched && params.addCertificatesV1() && isHttps && !(options as https.RequestOptions).ca;
+			const addCertificatesV1 = !optionsPatched && params.addCertificatesV1() && isHttps && !(options as https.RequestOptions).ca && !(originalAgent instanceof originals.Agent && (originalAgent as https.Agent).options?.ca);
 
 			if (useProxySettings || addCertificatesV1) {
 				if (url) {
@@ -402,6 +402,7 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 
 export interface SecureContextOptionsPatch {
 	_vscodeAdditionalCaCerts?: (string | Buffer)[];
+	_vscodeTestReplaceCaCerts?: boolean;
 }
 
 export function createNetPatch(params: ProxyAgentParams, originals: typeof net) {
@@ -553,7 +554,11 @@ function addCertificatesV1(params: ProxyAgentParams, addCertificatesV1: boolean,
 	if (addCertificatesV1) {
 		getOrLoadAdditionalCertificates(params)
 			.then(caCertificates => {
-				(opts as SecureContextOptionsPatch)._vscodeAdditionalCaCerts = caCertificates;
+				if ((opts as SecureContextOptionsPatch)._vscodeTestReplaceCaCerts) {
+					(opts as https.RequestOptions).ca = caCertificates;
+				} else {
+					(opts as SecureContextOptionsPatch)._vscodeAdditionalCaCerts = caCertificates;
+				}
 				callback();
 			})
 			.catch(err => {

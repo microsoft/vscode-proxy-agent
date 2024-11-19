@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.25.0]
+- Do not overwrite https.Agent certificates ([microsoft/vscode#234175](https://github.com/microsoft/vscode/issues/234175))
+
 ## [0.24.0]
 - Skip keepAlive flag ([microsoft/vscode#228872](https://github.com/microsoft/vscode/issues/228872))
 - Refactor for reuse with fetch ([microsoft/vscode#228697](https://github.com/microsoft/vscode/issues/228697))

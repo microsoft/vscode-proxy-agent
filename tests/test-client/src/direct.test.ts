@@ -2,7 +2,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as vpa from '../../..';
 import { createPacProxyAgent } from '../../../src/agent';
-import { testRequest, ca, directProxyAgentParams } from './utils';
+import { testRequest, ca, directProxyAgentParams, unusedCa, directProxyAgentParamsV1 } from './utils';
 import * as assert from 'assert';
 
 describe('Direct client', function () {
@@ -175,5 +175,54 @@ describe('Direct client', function () {
 				assert.strictEqual(req.reusedSocket, true);
 			}
 		});
+	});
+	
+	it('should use system certificates', async function () {
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParamsV1);
+		const patchedHttps: typeof https = {
+			...https,
+			...vpa.createHttpPatch(directProxyAgentParamsV1, https, resolveProxy),
+		} as any;
+		await testRequest(patchedHttps, {
+			hostname: 'test-https-server',
+			path: '/test-path',
+			_vscodeTestReplaceCaCerts: true,
+		});
+	});
+	it('should use ca request option', async function () {
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParamsV1);
+		const patchedHttps: typeof https = {
+			...https,
+			...vpa.createHttpPatch(directProxyAgentParamsV1, https, resolveProxy),
+		} as any;
+		try {
+			await testRequest(patchedHttps, {
+				hostname: 'test-https-server',
+				path: '/test-path',
+				_vscodeTestReplaceCaCerts: true,
+				ca: unusedCa,
+			});
+			assert.fail('Expected to fail with self-signed certificate');
+		} catch (err: any) {
+			assert.strictEqual(err?.message, 'self-signed certificate');
+		}
+	});
+	it('should use ca agent option', async function () {
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParamsV1);
+		const patchedHttps: typeof https = {
+			...https,
+			...vpa.createHttpPatch(directProxyAgentParamsV1, https, resolveProxy),
+		} as any;
+		try {
+			await testRequest(patchedHttps, {
+				hostname: 'test-https-server',
+				path: '/test-path',
+				_vscodeTestReplaceCaCerts: true,
+				agent: new https.Agent({ ca: unusedCa }),
+			});
+			assert.fail('Expected to fail with self-signed certificate');
+		} catch (err: any) {
+			assert.strictEqual(err?.message, 'self-signed certificate');
+		}
 	});
 });

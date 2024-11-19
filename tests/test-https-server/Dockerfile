@@ -8,6 +8,7 @@ WORKDIR /etc/nginx
 
 CMD openssl req -nodes -x509 -newkey rsa:2048 -keyout ssl_key.pem -out ssl_cert.pem -days 365 -subj "/C=US/ST=Oregon/L=Portland/O=IT/CN=test-https-server" \
     && openssl req -nodes -x509 -newkey rsa:2048 -keyout ssl_teapot_key.pem -out ssl_teapot_cert.pem -days 365 -subj "/C=US/ST=Oregon/L=Portland/O=IT/CN=test-teapot-server" \
+    && openssl req -nodes -x509 -newkey rsa:2048 -keyout ssl_unused_key.pem -out ssl_unused_cert.pem -days 365 -subj "/C=US/ST=Oregon/L=Portland/O=IT/CN=test-https-server" \
     && nginx -g 'daemon off;'
 
 HEALTHCHECK --interval=1s --timeout=3s --retries=10 \
