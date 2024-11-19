@@ -1,7 +1,8 @@
 import * as https from 'https';
 import * as assert from 'assert';
+import * as vpa from '../../..';
 import { createPacProxyAgent } from '../../../src/agent';
-import { testRequest, ca } from './utils';
+import { testRequest, ca, unusedCa, proxiedProxyAgentParamsV1 } from './utils';
 
 describe('Proxied client', function () {
 	it('should use HTTP proxy for HTTPS connection', function () {
@@ -106,6 +107,93 @@ describe('Proxied client', function () {
 				},
 			}),
 			ca,
+		});
+	});
+	
+	it('should use system certificates', async function () {
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
+		const patchedHttps: typeof https = {
+			...https,
+			...vpa.createHttpPatch(proxiedProxyAgentParamsV1, https, resolveProxy),
+		} as any;
+		await testRequest(patchedHttps, {
+			hostname: 'test-https-server',
+			path: '/test-path',
+			_vscodeTestReplaceCaCerts: true,
+		});
+	});
+	it('should use ca request option', async function () {
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
+		const patchedHttps: typeof https = {
+			...https,
+			...vpa.createHttpPatch(proxiedProxyAgentParamsV1, https, resolveProxy),
+		} as any;
+		try {
+			await testRequest(patchedHttps, {
+				hostname: 'test-https-server',
+				path: '/test-path',
+				_vscodeTestReplaceCaCerts: true,
+				ca: unusedCa,
+			});
+			assert.fail('Expected to fail with self-signed certificate');
+		} catch (err: any) {
+			assert.strictEqual(err?.message, 'self-signed certificate');
+		}
+	});
+	it('should use ca agent option 1', async function () {
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
+		const patchedHttps: typeof https = {
+			...https,
+			...vpa.createHttpPatch(proxiedProxyAgentParamsV1, https, resolveProxy),
+		} as any;
+		try {
+			await testRequest(patchedHttps, {
+				hostname: 'test-https-server',
+				path: '/test-path',
+				_vscodeTestReplaceCaCerts: true,
+				agent: new https.Agent({ ca: unusedCa }),
+			});
+			assert.fail('Expected to fail with self-signed certificate');
+		} catch (err: any) {
+			assert.strictEqual(err?.message, 'self-signed certificate');
+		}
+	});
+	it('should use ca agent option 2', async function () {
+		try {
+			vpa.resetCaches(); // Allows loadAdditionalCertificates to run again.
+			const params = {
+				...proxiedProxyAgentParamsV1,
+				loadAdditionalCertificates: async () => [
+					...await vpa.loadSystemCertificates({ log: console }),
+				],
+			};
+			const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(params);
+			const patchedHttps: typeof https = {
+				...https,
+				...vpa.createHttpPatch(params, https, resolveProxy),
+			} as any;
+			await testRequest(patchedHttps, {
+				hostname: 'test-https-server',
+				path: '/test-path',
+				_vscodeTestReplaceCaCerts: true,
+				agent: new https.Agent({ ca }),
+			});
+		} finally {
+			vpa.resetCaches(); // Allows loadAdditionalCertificates to run again.
+		}
+	});
+	it('should prefer ca agent option', async function () {
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
+		const patchedHttps: typeof https = {
+			...https,
+			...vpa.createHttpPatch(proxiedProxyAgentParamsV1, https, resolveProxy),
+		} as any;
+		await testRequest(patchedHttps, {
+			hostname: 'test-https-server',
+			path: '/test-path',
+			_vscodeTestReplaceCaCerts: true,
+			ca: unusedCa,
+			agent: new https.Agent({ ca: undefined }),
 		});
 	});
 });

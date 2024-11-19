@@ -363,7 +363,11 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 			const optionsPatched = originalAgent instanceof PacProxyAgent;
 			const config = params.getProxySupport();
 			const useProxySettings = !optionsPatched && (config === 'override' || config === 'fallback' || (config === 'on' && originalAgent === undefined));
-			const addCertificatesV1 = !optionsPatched && params.addCertificatesV1() && isHttps && !(options as https.RequestOptions).ca && !(originalAgent instanceof originals.Agent && (originalAgent as https.Agent).options?.ca);
+			// If Agent.options.ca is set to undefined, it overwrites RequestOptions.ca.
+			const originalOptionsCa = isHttps ? (options as https.RequestOptions).ca : undefined;
+			const originalAgentCa = isHttps && originalAgent instanceof originals.Agent && (originalAgent as https.Agent).options && 'ca' in (originalAgent as https.Agent).options && (originalAgent as https.Agent).options.ca;
+			const originalCa = originalAgentCa !== false ? originalAgentCa : originalOptionsCa;
+			const addCertificatesV1 = !optionsPatched && params.addCertificatesV1() && isHttps && !originalCa;
 
 			if (useProxySettings || addCertificatesV1) {
 				if (url) {
@@ -391,6 +395,9 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 				});
 				agent.protocol = isHttps ? 'https:' : 'http:';
 				options.agent = agent
+				if (isHttps) {
+					(options as https.RequestOptions).ca = originalCa;
+				}
 				return original(options, callback);
 			}
 
