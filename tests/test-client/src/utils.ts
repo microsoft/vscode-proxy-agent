@@ -37,6 +37,11 @@ export const directProxyAgentParamsV1: vpa.ProxyAgentParams = {
 	addCertificatesV2: () => false,
 };
 
+export const proxiedProxyAgentParamsV1: vpa.ProxyAgentParams = {
+	...directProxyAgentParamsV1,
+	resolveProxy: async () => 'PROXY test-http-proxy:3128',
+};
+
 export async function testRequest<C extends typeof https | typeof http>(client: C, options: C extends typeof https ? (https.RequestOptions & vpa.SecureContextOptionsPatch) : http.RequestOptions, testOptions: { assertResult?: (result: any, req: http.ClientRequest, res: http.IncomingMessage) => void; } = {}) {
 	return new Promise<void>((resolve, reject) => {
 		const req = client.request(options, res => {
