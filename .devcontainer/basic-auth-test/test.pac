@@ -1,5 +1,7 @@
 function FindProxyForURL(url, host) {
-	if (dnsDomainIs(host, "marketplace.visualstudio.com"))
+	if (dnsDomainIs(host, "github.com"))
 		return "PROXY localhost:3111";
-	return "PROXY localhost:3122";
+	if (dnsDomainIs(host, "githubcopilot.com"))
+		return "PROXY localhost:3122";
+	return "DIRECT";
 }
