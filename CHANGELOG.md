@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.26.0]
+- Move fetch patching to agent package ([microsoft/vscode#228697](https://github.com/microsoft/vscode/issues/228697))
+
 ## [0.25.0]
 - Do not overwrite https.Agent certificates ([microsoft/vscode#234175](https://github.com/microsoft/vscode/issues/234175))
 
