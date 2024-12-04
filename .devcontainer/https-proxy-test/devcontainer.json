@@ -1,0 +1,6 @@
+{
+	"name": "HTTPS Proxy Test",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "devcontainer",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/.devcontainer/https-proxy-test"
+}

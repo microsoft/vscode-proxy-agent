@@ -1,0 +1,12 @@
+version: '3.4'
+
+services:
+    devcontainer:
+        image: mitmproxy/mitmproxy
+        volumes:
+          - ../../..:/workspaces
+          - ./mitmproxy-config:/root/.mitmproxy
+        ports:
+            - "127.0.0.1:8080:8080"
+            - "127.0.0.1:8081:8081"
+        command: sleep inf
