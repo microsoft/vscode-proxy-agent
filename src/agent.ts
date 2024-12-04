@@ -34,14 +34,17 @@ type FindProxyForURL = (req: http.ClientRequest, opts: http.RequestOptions, url:
 export class PacProxyAgent extends Agent {
 	resolver: FindProxyForURL;
 	opts: PacProxyAgentOptions;
+	addCAs: (opts: PacProxyAgentOptions) => Promise<void>;
+	casAdded = false;
 	cache?: Readable;
 
-	constructor(resolver: FindProxyForURL, opts: PacProxyAgentOptions = {}) {
+	constructor(resolver: FindProxyForURL, opts: PacProxyAgentOptions = {}, addCAs: (opts: PacProxyAgentOptions) => Promise<void> = async () => {}) {
 		super(opts);
 		debug('Creating PacProxyAgent with options %o', opts);
 
 		this.resolver = resolver;
 		this.opts = { ...opts };
+		this.addCAs = addCAs;
 		this.cache = undefined;
 	}
 
@@ -96,6 +99,11 @@ export class PacProxyAgent extends Agent {
 		} else if (proxyURL.startsWith('http')) {
 			// Use an HTTP or HTTPS proxy
 			// http://dev.chromium.org/developers/design-documents/secure-web-proxy
+			if (!this.casAdded && proxyURL.startsWith('https')) {
+				debug('Adding CAs to proxy options');
+				this.casAdded = true;
+				await this.addCAs(this.opts);
+			}
 			if (secureEndpoint) {
 				agent = new HttpsProxyAgent2(proxyURL, this.opts);
 			} else {
@@ -235,7 +243,8 @@ class HttpsProxyAgent2<Uri extends string> extends HttpsProxyAgent<Uri> {
 
 export function createPacProxyAgent(
 	resolver: FindProxyForURL,
-	opts?: PacProxyAgentOptions
+	opts?: PacProxyAgentOptions,
+	addCAs?: (opts: PacProxyAgentOptions) => Promise<void>,
 ): PacProxyAgent {
 	if (!opts) {
 		opts = {};
@@ -245,7 +254,7 @@ export function createPacProxyAgent(
 		throw new TypeError('a resolve function must be specified!');
 	}
 
-	return new PacProxyAgent(resolver, opts);
+	return new PacProxyAgent(resolver, opts, addCAs);
 }
 type PacProxyAgentOptions =
 		HttpProxyAgentOptions<''> &
