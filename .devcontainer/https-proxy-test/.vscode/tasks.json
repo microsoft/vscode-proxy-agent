@@ -1,0 +1,13 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "mitmweb",
+            "type": "shell",
+            "command": "mitmweb --web-host '*'",
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        }
+    ]
+}
