@@ -597,8 +597,8 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 				uri: proxyURL,
 				allowH2,
 				headers: proxyAuthorization ? { 'Proxy-Authorization': proxyAuthorization } : undefined,
-				...(requestCA ? { requestTls: { ca: requestCA } } : {}),
-				...(proxyCA ? { proxyTls: { ca: proxyCA } } : {}),
+				requestTls: requestCA ? { allowH2, ca: requestCA } : { allowH2 },
+				proxyTls: proxyCA ? { allowH2, ca: proxyCA } : { allowH2 },
 				clientFactory: (origin: URL, opts: object): undici.Dispatcher => (new undici.Pool(origin, opts) as any).compose((dispatch: undici.Dispatcher['dispatch']) => {
 					class ProxyAuthHandler extends undici.DecoratorHandler {
 						private abort: ((err?: Error) => void) | undefined;
