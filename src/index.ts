@@ -138,7 +138,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 
 		const stackText = ''; // getLogLevel() === LogLevel.Trace ? '\n' + new Error('Error for stack trace').stack : '';
 
-		addCertificatesV1(params, flags.addCertificatesV1, opts, () => {
+		addCertificatesToOptionsV1(params, flags.addCertificatesV1, opts, () => {
 			if (!flags.useProxySettings) {
 				callback('DIRECT');
 				return;
@@ -395,7 +395,7 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 					originalAgent: (!useProxySettings || isLocalhost || config === 'fallback') ? originalAgent : undefined,
 					lookupProxyAuthorization: params.lookupProxyAuthorization,
 					// keepAlive: ((originalAgent || originals.globalAgent) as { keepAlive?: boolean }).keepAlive, // Skipping due to https://github.com/microsoft/vscode/issues/228872.
-				});
+				}, opts => new Promise<void>(resolve => addCertificatesToOptionsV1(params, params.addCertificatesV1(), opts, resolve)));
 				agent.protocol = isHttps ? 'https:' : 'http:';
 				options.agent = agent
 				if (isHttps) {
@@ -727,7 +727,7 @@ function getAgentOptions(systemCA: string[] | undefined, requestInit: RequestIni
 	return { allowH2, requestCA, proxyCA };
 }
 
-function addCertificatesV1(params: ProxyAgentParams, addCertificatesV1: boolean, opts: http.RequestOptions, callback: () => void) {
+function addCertificatesToOptionsV1(params: ProxyAgentParams, addCertificatesV1: boolean, opts: http.RequestOptions | tls.ConnectionOptions, callback: () => void) {
 	if (addCertificatesV1) {
 		getOrLoadAdditionalCertificates(params)
 			.then(caCertificates => {
