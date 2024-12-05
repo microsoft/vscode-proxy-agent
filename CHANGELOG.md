@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.27.0]
+- Add system certificates to https proxy requests ([microsoft/vscode#235410](https://github.com/microsoft/vscode/issues/235410))
+
 ## [0.26.0]
 - Move fetch patching to agent package ([microsoft/vscode#228697](https://github.com/microsoft/vscode/issues/228697))
 
