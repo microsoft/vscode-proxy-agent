@@ -18,6 +18,7 @@ export const directProxyAgentParams: vpa.ProxyAgentParams = {
 	resolveProxy: async () => 'DIRECT',
 	getProxyURL: () => undefined,
 	getProxySupport: () => 'override',
+    isAdditionalFetchSupportEnabled: () => true,
 	addCertificatesV1: () => false,
 	addCertificatesV2: () => true,
 	log: console,
@@ -40,6 +41,11 @@ export const directProxyAgentParamsV1: vpa.ProxyAgentParams = {
 export const proxiedProxyAgentParamsV1: vpa.ProxyAgentParams = {
 	...directProxyAgentParamsV1,
 	resolveProxy: async () => 'PROXY test-http-proxy:3128',
+};
+
+export const tlsProxiedProxyAgentParamsV1: vpa.ProxyAgentParams = {
+	...directProxyAgentParamsV1,
+	resolveProxy: async () => 'HTTPS test-https-proxy:8080',
 };
 
 export async function testRequest<C extends typeof https | typeof http>(client: C, options: C extends typeof https ? (https.RequestOptions & vpa.SecureContextOptionsPatch) : http.RequestOptions, testOptions: { assertResult?: (result: any, req: http.ClientRequest, res: http.IncomingMessage) => void; } = {}) {
