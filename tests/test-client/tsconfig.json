@@ -4,10 +4,7 @@
 		"target": "es2015",
 		"esModuleInterop": true,
 		"strict": true,
-		"resolveJsonModule": true,
-		"lib": [
-			"esnext"
-		]
+		"resolveJsonModule": true
 	},
 	"exclude": [
 		"node_modules"

@@ -262,4 +262,5 @@ type PacProxyAgentOptions =
 		SocksProxyAgentOptions & {
 	fallbackToDirect?: boolean;
 	originalAgent?: false | http.Agent;
+	_vscodeTestReplaceCaCerts?: boolean;
 }

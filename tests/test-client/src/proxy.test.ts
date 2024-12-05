@@ -1,8 +1,11 @@
 import * as https from 'https';
+import * as tls from 'tls';
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
 import * as vpa from '../../..';
 import { createPacProxyAgent } from '../../../src/agent';
-import { testRequest, ca, unusedCa, proxiedProxyAgentParamsV1 } from './utils';
+import { testRequest, ca, unusedCa, proxiedProxyAgentParamsV1, tlsProxiedProxyAgentParamsV1 } from './utils';
 
 describe('Proxied client', function () {
 	it('should use HTTP proxy for HTTPS connection', function () {
@@ -12,6 +15,27 @@ describe('Proxied client', function () {
 			agent: createPacProxyAgent(async () => 'PROXY test-http-proxy:3128'),
 			ca,
 		});
+	});
+
+	it('should use HTTPS proxy for HTTPS connection', function () {
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(tlsProxiedProxyAgentParamsV1);
+		const patchedHttps: typeof https = {
+			...https,
+			...vpa.createHttpPatch(tlsProxiedProxyAgentParamsV1, https, resolveProxy),
+		} as any;
+		return testRequest(patchedHttps, {
+			hostname: 'test-https-server',
+			path: '/test-path',
+			_vscodeTestReplaceCaCerts: true,
+		});
+	});
+
+	it('should use HTTPS proxy for HTTPS connection (fetch)', async function () {
+		const { resolveProxyURL } = vpa.createProxyResolver(tlsProxiedProxyAgentParamsV1);
+		const patchedFetch = vpa.createFetchPatch(tlsProxiedProxyAgentParamsV1, globalThis.fetch, resolveProxyURL);
+		const res = await patchedFetch('https://test-https-server/test-path');
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual((await res.json()).status, 'OK!');
 	});
 
 	it('should support basic auth', function () {

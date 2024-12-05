@@ -19,12 +19,16 @@ services:
         build: test-proxy-client
         volumes:
             - ..:/repo
+            - ./test-https-proxy/mitmproxy-config:/root/.mitmproxy
         networks:
             - test-proxies
         working_dir: /repo/tests/test-client
         environment:
             - MOCHA_TESTS=src/proxy.test.ts
         command: /bin/sh -c '
+            while [ ! -f /root/.mitmproxy/mitmproxy-ca-cert.pem ]; do sleep 1; done &&
+            cp /root/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy.crt &&
+            update-ca-certificates &&
             /usr/local/bin/configure-kerberos-client.sh &&
             rm -rf /root/.npm &&
             npm run test:watch'
@@ -34,6 +38,8 @@ services:
             test-http-auth-proxy:
                 condition: service_started
             test-http-kerberos-proxy:
+                condition: service_started
+            test-https-proxy:
                 condition: service_started
     test-http-proxy:
         image: ubuntu/squid:latest
@@ -65,6 +71,21 @@ services:
             - test-proxies-and-servers
         ports:
             - 80
+        depends_on:
+            test-https-server:
+                condition: service_healthy
+    test-https-proxy:
+        image: mitmproxy/mitmproxy:latest
+        # https://stackoverflow.com/q/61453754
+        command: /bin/sh -c 'update-ca-certificates && mitmdump --set ssl_insecure=true'
+        volumes:
+            - ./test-https-proxy/mitmproxy-config:/root/.mitmproxy
+            - ./test-https-server/ssl_cert.pem:/usr/local/share/ca-certificates/test-https-server.crt
+        networks:
+            - test-proxies
+            - test-proxies-and-servers
+        ports:
+            - 8080
         depends_on:
             test-https-server:
                 condition: service_healthy
