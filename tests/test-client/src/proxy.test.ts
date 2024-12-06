@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vpa from '../../..';
 import { createPacProxyAgent } from '../../../src/agent';
-import { testRequest, ca, unusedCa, proxiedProxyAgentParamsV1, tlsProxiedProxyAgentParamsV1 } from './utils';
+import { testRequest, ca, unusedCa, proxiedProxyAgentParamsV1, tlsProxiedProxyAgentParamsV1, log } from './utils';
 
 describe('Proxied client', function () {
 	it('should use HTTP proxy for HTTPS connection', function () {
@@ -126,7 +126,6 @@ describe('Proxied client', function () {
 					if (proxyAuthenticate) {
 						assert.strictEqual(proxyAuthenticate, 'Negotiate');
 					}
-					const log = { ...console, trace: console.log };
 					return lookupProxyAuthorization(log, log, proxyAuthenticateCache, true, proxyURL, proxyAuthenticate, state);
 				},
 			}),
@@ -188,7 +187,7 @@ describe('Proxied client', function () {
 			const params = {
 				...proxiedProxyAgentParamsV1,
 				loadAdditionalCertificates: async () => [
-					...await vpa.loadSystemCertificates({ log: console }),
+					...await vpa.loadSystemCertificates({ log }),
 				],
 			};
 			const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(params);
@@ -279,7 +278,7 @@ function sendTelemetry(mainThreadTelemetry: Console, authenticate: string[], isR
 	}
 	telemetrySent = true;
 
-	mainThreadTelemetry.log('proxyAuthenticationRequest', {
+	mainThreadTelemetry.debug('proxyAuthenticationRequest', {
 		authenticationType: authenticate.map(a => a.split(' ')[0]).join(','),
 		extensionHostType: isRemote ? 'remote' : 'local',
 	});

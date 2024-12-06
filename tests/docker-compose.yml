@@ -8,9 +8,7 @@ services:
         networks:
             - test-servers
         working_dir: /repo/tests/test-client
-        environment:
-            - MOCHA_TESTS=src/direct.test.ts src/tls.test.ts src/socket.test.ts
-        command: /bin/sh -c 'rm -rf /root/.npm && npm run test:watch'
+        command: /bin/sh -c 'rm -rf /root/.npm && npm run test src/direct.test.ts src/tls.test.ts src/socket.test.ts'
         depends_on:
             test-https-server:
                 condition: service_healthy
@@ -23,15 +21,13 @@ services:
         networks:
             - test-proxies
         working_dir: /repo/tests/test-client
-        environment:
-            - MOCHA_TESTS=src/proxy.test.ts
         command: /bin/sh -c '
             while [ ! -f /root/.mitmproxy/mitmproxy-ca-cert.pem ]; do sleep 1; done &&
             cp /root/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy.crt &&
             update-ca-certificates &&
             /usr/local/bin/configure-kerberos-client.sh &&
             rm -rf /root/.npm &&
-            npm run test:watch'
+            npm run test src/proxy.test.ts'
         depends_on:
             test-http-proxy:
                 condition: service_started
