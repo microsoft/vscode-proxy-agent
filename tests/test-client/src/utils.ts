@@ -82,6 +82,9 @@ export async function testRequest<C extends typeof https | typeof http>(client: 
 					reject(err);
 				}
 			});
+			res.on('error', err => {
+				reject(err);
+			});
 		});
 		req.on('error', err => {
 			reject(err);
