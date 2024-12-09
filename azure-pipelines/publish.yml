@@ -48,10 +48,10 @@ extends:
           - script: docker run --rm -v `pwd`/..:/repo -w /repo/tests/test-client node:20 npm i
             workingDirectory: tests
             displayName: Install test dependencies
-          - script: docker compose run test-direct-client
+          - script: docker ps -a -q | xargs docker rm -f && docker compose run test-direct-client
             workingDirectory: tests
             displayName: Test direct client
-          - script: docker compose run test-proxy-client
+          - script: docker ps -a -q | xargs docker rm -f && docker compose run test-proxy-client
             workingDirectory: tests
             displayName: Test proxy client
 
