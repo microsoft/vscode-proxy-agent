@@ -7,6 +7,8 @@ import * as assert from 'assert';
 import * as vpa from '../../..';
 import { loadSystemCertificates } from '../../../src';
 
+export const log = { ...console, debug: () => {}, trace: () => {} };
+
 export const ca = [
 	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_cert.pem')).toString(),
 	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_teapot_cert.pem')).toString(),
@@ -21,12 +23,12 @@ export const directProxyAgentParams: vpa.ProxyAgentParams = {
     isAdditionalFetchSupportEnabled: () => true,
 	addCertificatesV1: () => false,
 	addCertificatesV2: () => true,
-	log: console,
+	log,
 	getLogLevel: () => vpa.LogLevel.Trace,
 	proxyResolveTelemetry: () => undefined,
 	useHostProxy: true,
 	loadAdditionalCertificates: async () => [
-		...await loadSystemCertificates({ log: console }),
+		...await loadSystemCertificates({ log }),
 		...ca,
 	],
 	env: {},
@@ -79,6 +81,9 @@ export async function testRequest<C extends typeof https | typeof http>(client: 
 					err.message = `${err.message}: ${data}`;
 					reject(err);
 				}
+			});
+			res.on('error', err => {
+				reject(err);
 			});
 		});
 		req.on('error', err => {
