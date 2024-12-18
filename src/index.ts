@@ -566,6 +566,10 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 		if (!params.isAdditionalFetchSupportEnabled()) {
 			return originalFetch(input, init);
 		}
+		const agentOptions = getAgentOptions(init);
+		if (agentOptions.socketPath) {
+			return originalFetch(input, init);
+		}
 		const proxySupport = params.getProxySupport();
 		const doResolveProxy = proxySupport === 'override' || proxySupport === 'fallback' || (proxySupport === 'on' && ((init as any)?.dispatcher) === undefined);
 		const addCerts = params.addCertificatesV1();
@@ -577,8 +581,10 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 		if (!proxyURL && !addCerts) {
 			return originalFetch(input, init);
 		}
-		const ca = addCerts ? [...tls.rootCertificates, ...await getOrLoadAdditionalCertificates(params)] : undefined;
-		const { allowH2, requestCA, proxyCA } = getAgentOptions(ca, init);
+		const systemCA = addCerts ? [...tls.rootCertificates, ...await getOrLoadAdditionalCertificates(params)] : undefined;
+		const { allowH2 } = agentOptions;
+		const requestCA = agentOptions.requestCA || systemCA;
+		const proxyCA = agentOptions.proxyCA || systemCA;
 		if (!proxyURL) {
 			const modifiedInit = {
 				...init,
@@ -709,23 +715,27 @@ export function patchUndici(originalUndici: typeof undici) {
 	(originalUndici as any).ProxyAgent = patchedProxyAgent;
 }
 
-function getAgentOptions(systemCA: string[] | undefined, requestInit: RequestInit | undefined) {
+function getAgentOptions(requestInit: RequestInit | undefined) {
 	let allowH2: boolean | undefined;
-	let requestCA: string | Buffer | Array<string | Buffer> | undefined = systemCA;
-	let proxyCA: string | Buffer | Array<string | Buffer> | undefined = systemCA;
+	let requestCA: string | Buffer | Array<string | Buffer> | undefined;
+	let proxyCA: string | Buffer | Array<string | Buffer> | undefined;
+	let socketPath: string | undefined;
 	const dispatcher: undici.Dispatcher = (requestInit as any)?.dispatcher;
 	const originalAgentOptions: undici.Agent.Options | undefined = dispatcher && (dispatcher as any)[agentOptions];
 	if (originalAgentOptions) {
 		allowH2 = originalAgentOptions.allowH2;
-		requestCA = originalAgentOptions.connect && typeof originalAgentOptions.connect === 'object' && 'ca' in originalAgentOptions.connect && originalAgentOptions.connect.ca || systemCA;
+		if (originalAgentOptions.connect && typeof originalAgentOptions.connect === 'object') {
+			requestCA = 'ca' in originalAgentOptions.connect && originalAgentOptions.connect.ca || undefined;
+			socketPath = originalAgentOptions.connect.socketPath || undefined;
+		}
 	}
 	const originalProxyAgentOptions: undici.ProxyAgent.Options | string | undefined = dispatcher && (dispatcher as any)[proxyAgentOptions];
 	if (originalProxyAgentOptions && typeof originalProxyAgentOptions === 'object') {
 		allowH2 = originalProxyAgentOptions.allowH2;
-		requestCA = originalProxyAgentOptions.requestTls && 'ca' in originalProxyAgentOptions.requestTls && originalProxyAgentOptions.requestTls.ca || systemCA;
-		proxyCA = originalProxyAgentOptions.proxyTls && 'ca' in originalProxyAgentOptions.proxyTls && originalProxyAgentOptions.proxyTls.ca || systemCA;
+		requestCA = originalProxyAgentOptions.requestTls && 'ca' in originalProxyAgentOptions.requestTls && originalProxyAgentOptions.requestTls.ca || undefined;
+		proxyCA = originalProxyAgentOptions.proxyTls && 'ca' in originalProxyAgentOptions.proxyTls && originalProxyAgentOptions.proxyTls.ca || undefined;
 	}
-	return { allowH2, requestCA, proxyCA };
+	return { allowH2, requestCA, proxyCA, socketPath };
 }
 
 function addCertificatesToOptionsV1(params: ProxyAgentParams, addCertificatesV1: boolean, opts: http.RequestOptions | tls.ConnectionOptions, callback: () => void) {

@@ -1,6 +1,6 @@
 {
   "name": "@vscode/proxy-agent",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "description": "NodeJS http(s) agent implementation for VS Code",
   "main": "out/index.js",
   "types": "out/index.d.ts",

@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.28.0]
+- Pass-through with socketPath ([microsoft/vscode#236423](https://github.com/microsoft/vscode/issues/236423))
+
 ## [0.27.0]
 - Add system certificates to https proxy requests ([microsoft/vscode#235410](https://github.com/microsoft/vscode/issues/235410))
 
