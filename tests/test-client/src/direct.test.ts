@@ -1,9 +1,14 @@
 import * as http from 'http';
 import * as https from 'https';
+import * as undici from 'undici';
+import * as assert from 'assert';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import * as crypto from 'crypto';
 import * as vpa from '../../..';
 import { createPacProxyAgent } from '../../../src/agent';
-import { testRequest, ca, directProxyAgentParams, unusedCa, directProxyAgentParamsV1 } from './utils';
-import * as assert from 'assert';
+import { testRequest, ca, directProxyAgentParams, unusedCa, directProxyAgentParamsV1, proxiedProxyAgentParamsV1 } from './utils';
 
 describe('Direct client', function () {
 	it('should work without agent', function () {
@@ -262,5 +267,33 @@ describe('Direct client', function () {
 			ca: unusedCa,
 			agent: new https.Agent({ ca: undefined }),
 		});
+	});
+
+	it('should pass-through with socketPath (fetch)', async function () {
+		// https://github.com/microsoft/vscode/issues/236423
+		const server = http.createServer((_, res) => {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			res.end(JSON.stringify({ status: 'OK from socket path!' }));
+		});
+		try {
+			const socketPath = path.join(os.tmpdir(), `test-server-${crypto.randomUUID()}.sock`);
+			await new Promise<void>(resolve => server.listen(socketPath, resolve));
+	
+			const { resolveProxyURL } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
+			const patchedFetch = vpa.createFetchPatch(proxiedProxyAgentParamsV1, globalThis.fetch, resolveProxyURL);
+			const patchedUndici = { ...undici };
+			vpa.patchUndici(patchedUndici);
+			const res = await patchedFetch('http://localhost/test-path', {
+				dispatcher: new patchedUndici.Agent({
+					connect: {
+						socketPath,
+					},
+				})
+			} as any);
+			assert.strictEqual(res.status, 200);
+			assert.strictEqual((await res.json()).status, 'OK from socket path!');
+		} finally {
+			server.close();
+		}
 	});
 });
