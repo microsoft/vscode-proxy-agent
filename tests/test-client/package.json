@@ -4,8 +4,7 @@
   "description": "",
   "main": "test.js",
   "scripts": {
-    "test": "mocha -r ts-node/register $MOCHA_TESTS",
-    "test:watch": "npm test -- -w --watch-extensions ts"
+    "test": "mocha -r ts-node/register --exit"
   },
   "keywords": [],
   "author": "",

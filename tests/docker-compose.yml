@@ -8,14 +8,11 @@ services:
         networks:
             - test-servers
         working_dir: /repo/tests/test-client
-        environment:
-            - MOCHA_TESTS=src/direct.test.ts src/tls.test.ts src/socket.test.ts
-        command: /bin/sh -c 'rm -rf /root/.npm && npm run test:watch'
+        command: /bin/sh -c 'rm -rf /root/.npm && npm run test src/direct.test.ts src/tls.test.ts src/socket.test.ts'
         depends_on:
             test-https-server:
                 condition: service_healthy
     test-proxy-client:
-        image: test-proxy-client:latest
         build: test-proxy-client
         volumes:
             - ..:/repo
@@ -23,15 +20,13 @@ services:
         networks:
             - test-proxies
         working_dir: /repo/tests/test-client
-        environment:
-            - MOCHA_TESTS=src/proxy.test.ts
         command: /bin/sh -c '
             while [ ! -f /root/.mitmproxy/mitmproxy-ca-cert.pem ]; do sleep 1; done &&
             cp /root/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy.crt &&
             update-ca-certificates &&
             /usr/local/bin/configure-kerberos-client.sh &&
             rm -rf /root/.npm &&
-            npm run test:watch'
+            npm run test src/proxy.test.ts'
         depends_on:
             test-http-proxy:
                 condition: service_started
@@ -52,7 +47,6 @@ services:
             test-https-server:
                 condition: service_healthy
     test-http-auth-proxy:
-        image: test-http-auth-proxy:latest
         build: test-http-auth-proxy
         networks:
             - test-proxies
@@ -63,7 +57,6 @@ services:
             test-https-server:
                 condition: service_healthy
     test-http-kerberos-proxy:
-        image: test-http-kerberos-proxy:latest
         build: test-http-kerberos-proxy
         container_name: test-http-kerberos-proxy # needs to be configured to have a static name for the kerberos server hostname
         networks:
@@ -90,7 +83,6 @@ services:
             test-https-server:
                 condition: service_healthy
     test-https-server:
-        image: test-https-server:latest
         build: test-https-server
         volumes:
             - ./test-https-server:/etc/nginx
