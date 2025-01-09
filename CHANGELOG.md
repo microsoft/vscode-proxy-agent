@@ -1,6 +1,10 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.29.0]
+- Update to undici 7.2.0 ([microsoft/vscode-proxy-agent#57](https://github.com/microsoft/vscode-proxy-agent/pull/57))
+- Get options from unpatched agents ([microsoft/vscode-proxy-agent#58](https://github.com/microsoft/vscode-proxy-agent/pull/58))
+
 ## [0.28.0]
 - Pass-through with socketPath ([microsoft/vscode#236423](https://github.com/microsoft/vscode/issues/236423))
 
