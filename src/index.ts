@@ -609,7 +609,7 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 				clientFactory: (origin: URL, opts: object): undici.Dispatcher => (new undici.Pool(origin, opts) as any).compose((dispatch: undici.Dispatcher['dispatch']) => {
 					class ProxyAuthHandler extends undici.DecoratorHandler {
 						private abort: ((err?: Error) => void) | undefined;
-						constructor(private dispatch: undici.Dispatcher['dispatch'], private options: undici.Dispatcher.DispatchOptions, private handler: undici.Dispatcher.DispatchHandlers) {
+						constructor(private dispatch: undici.Dispatcher['dispatch'], private options: undici.Dispatcher.DispatchOptions, private handler: undici.Dispatcher.DispatchHandler) {
 							super(handler);
 						}
 						onConnect(abort: (err?: Error) => void): void {
@@ -670,7 +670,7 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 							this.handler.onUpgrade?.(statusCode, headers, socket);
 						}
 					}
-					return function proxyAuthDispatch(options: undici.Dispatcher.DispatchOptions, handler: undici.Dispatcher.DispatchHandlers) {
+					return function proxyAuthDispatch(options: undici.Dispatcher.DispatchOptions, handler: undici.Dispatcher.DispatchHandler) {
 						return dispatch(options, new ProxyAuthHandler(dispatch, options, handler));
 					};
 				}),

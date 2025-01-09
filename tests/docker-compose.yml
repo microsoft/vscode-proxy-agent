@@ -2,7 +2,7 @@ version: '3.9'
 
 services:
     test-direct-client:
-        image: node:20
+        image: node:20.18.1
         volumes:
             - ..:/repo
         networks:
