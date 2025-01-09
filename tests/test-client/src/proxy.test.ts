@@ -1,8 +1,6 @@
 import * as https from 'https';
-import * as tls from 'tls';
+import * as undici from 'undici';
 import * as assert from 'assert';
-import * as fs from 'fs';
-import * as path from 'path';
 import * as vpa from '../../..';
 import { createPacProxyAgent } from '../../../src/agent';
 import { testRequest, ca, unusedCa, proxiedProxyAgentParamsV1, tlsProxiedProxyAgentParamsV1 } from './utils';
@@ -219,6 +217,33 @@ describe('Proxied client', function () {
 			ca: unusedCa,
 			agent: new https.Agent({ ca: undefined }),
 		});
+	});
+
+	it('should pass-through allowH2 with patched undici (fetch)', async function () {
+		const { resolveProxyURL } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
+		const patchedFetch = vpa.createFetchPatch(proxiedProxyAgentParamsV1, globalThis.fetch, resolveProxyURL);
+			const patchedUndici = { ...undici };
+			vpa.patchUndici(patchedUndici);
+			const res = await patchedFetch('https://test-https-server/test-path', {
+				dispatcher: new patchedUndici.ProxyAgent({
+					uri: 'http://test-http-proxy:3128',
+					allowH2: true
+				})
+			} as any);
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual((await res.json()).status, 'OK HTTP2!');
+	});
+	it('should pass-through allowH2 with unpatched undici (fetch)', async function () {
+		const { resolveProxyURL } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
+		const patchedFetch = vpa.createFetchPatch(proxiedProxyAgentParamsV1, globalThis.fetch, resolveProxyURL);
+			const res = await patchedFetch('https://test-https-server/test-path', {
+				dispatcher: new undici.ProxyAgent({
+					uri: 'http://test-http-proxy:3128',
+					allowH2: true
+				})
+			} as any);
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual((await res.json()).status, 'OK HTTP2!');
 	});
 });
 

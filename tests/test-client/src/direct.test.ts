@@ -296,4 +296,28 @@ describe('Direct client', function () {
 			server.close();
 		}
 	});
+	it('should pass-through allowH2 with patched undici (fetch)', async function () {
+		const { resolveProxyURL } = vpa.createProxyResolver(directProxyAgentParamsV1);
+		const patchedFetch = vpa.createFetchPatch(directProxyAgentParamsV1, globalThis.fetch, resolveProxyURL);
+			const patchedUndici = { ...undici };
+			vpa.patchUndici(patchedUndici);
+			const res = await patchedFetch('https://test-https-server/test-path', {
+				dispatcher: new patchedUndici.Agent({
+					allowH2: true
+				})
+			} as any);
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual((await res.json()).status, 'OK HTTP2!');
+	});
+	it('should pass-through allowH2 with unpatched undici (fetch)', async function () {
+		const { resolveProxyURL } = vpa.createProxyResolver(directProxyAgentParamsV1);
+		const patchedFetch = vpa.createFetchPatch(directProxyAgentParamsV1, globalThis.fetch, resolveProxyURL);
+			const res = await patchedFetch('https://test-https-server/test-path', {
+				dispatcher: new undici.Agent({
+					allowH2: true
+				})
+			} as any);
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual((await res.json()).status, 'OK HTTP2!');
+	});
 });
