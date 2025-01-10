@@ -298,23 +298,63 @@ function proxyFromConfigURL(configURL: string | undefined) {
 }
 
 function shouldBypassProxy(value: string[]) {
-	if (value.includes("*")) {
-		return () => true;
+	return (hostname: string, port: string): boolean => {
+		const getIPVersion = (input: string): net.IPVersion | null => {
+			const version = net.isIP(input);
+			if (![4, 6].includes(version)) {
+				return null;
+			}
+			return version === 4 ? 'ipv4' : 'ipv6';
+		};
+		const blockList = new net.BlockList();
+		let ipVersion: net.IPVersion | null = null;
+		for (let denyHost of value) {
+			if (denyHost === '') {
+				continue;
+			}
+			// Blanket disable
+			if (denyHost === '*') {
+				return true;
+			}
+			// Full match
+			if (hostname === denyHost || `${hostname}:${port}` === denyHost) {
+				return true;
+			}
+			// Remove leading dots to validate suffixes
+			if (denyHost[0] === '.') {
+				denyHost = denyHost.substring(1);
+			}
+			if (hostname.endsWith(denyHost)) {
+				return true;
+			}
+			// IP+CIDR notation support, add those to our intermediate
+			// blocklist to be checked afterwards
+			if (ipVersion = getIPVersion(denyHost)) {
+				blockList.addAddress(denyHost, ipVersion);
+			}
+			const cidrPrefixMatch = denyHost.match(/^(?<ip>.*)\/(?<cidrPrefix>\d+)$/);
+			if (cidrPrefixMatch && cidrPrefixMatch.groups) {
+				const matchedIP = cidrPrefixMatch.groups['ip'];
+				const matchedPrefix = cidrPrefixMatch.groups['cidrPrefix'];
+				if (matchedIP && matchedPrefix) {
+					ipVersion = getIPVersion(matchedIP);
+					const prefix = Number(matchedPrefix);
+					if (ipVersion && prefix) {
+						blockList.addSubnet(matchedIP, prefix, ipVersion);
+					}
+				}
+			}
+		}
+
+		// Do a final check using block list if the requestUrl is an IP.
+		// Importantly domain names are not first resolved to an IP to
+		// do this check in line with how the rest of the ecosystem behaves
+		if (hostname && (ipVersion = getIPVersion(hostname)) && blockList.check(hostname, ipVersion)) {
+			return true;
+		}
+
+		return false;
 	}
-	const filters = value
-		.map(s => s.trim().split(':', 2))
-		.map(([name, port]) => ({ name, port }))
-		.filter(filter => !!filter.name)
-		.map(({ name, port }) => {
-			const domain = name[0] === '.' ? name : `.${name}`;
-			return { domain, port };
-		});
-	if (!filters.length) {
-		return () => false;
-	}
-	return (hostname: string, port: string) => filters.some(({ domain, port: filterPort }) => {
-		return `.${hostname.toLowerCase()}`.endsWith(domain) && (!filterPort || port === filterPort);
-	});
 }
 
 function noProxyFromEnv(envValue?: string) {
