@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.30.0]
+- useHostProxy > isUseHostProxyEnabled() ([microsoft/vscode-copilot-release#3821](https://github.com/microsoft/vscode-copilot-release/issues/3821))
+
 ## [0.29.0]
 - Update to undici 7.2.0 ([microsoft/vscode-proxy-agent#57](https://github.com/microsoft/vscode-proxy-agent/pull/57))
 - Get options from unpatched agents ([microsoft/vscode-proxy-agent#58](https://github.com/microsoft/vscode-proxy-agent/pull/58))
