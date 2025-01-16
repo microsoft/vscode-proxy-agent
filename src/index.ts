@@ -74,7 +74,7 @@ export interface ProxyAgentParams {
 	log: Log;
 	getLogLevel(): LogLevel;
 	proxyResolveTelemetry(event: ProxyResolveEvent): void;
-	useHostProxy: boolean;
+	isUseHostProxyEnabled: () => boolean;
 	env: NodeJS.ProcessEnv;
 }
 
@@ -195,6 +195,12 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			return;
 		}
 
+		if (!params.isUseHostProxyEnabled()) {
+			callback('DIRECT');
+			log.debug('ProxyResolver#resolveProxy unconfigured', url, 'DIRECT', stackText);
+			return;
+		}
+
 		const key = getCacheKey(parsedUrl);
 		const proxy = getCachedProxy(key);
 		if (proxy) {
@@ -204,12 +210,6 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			}
 			callback(proxy);
 			log.debug('ProxyResolver#resolveProxy cached', url, proxy, stackText);
-			return;
-		}
-
-		if (!params.useHostProxy) {
-			callback('DIRECT');
-			log.debug('ProxyResolver#resolveProxy unconfigured', url, 'DIRECT', stackText);
 			return;
 		}
 
