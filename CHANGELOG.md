@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.31.0]
+- Fix basic auth for fetch ([microsoft/vscode#239033](https://github.com/microsoft/vscode/issues/239033))
+
 ## [0.30.0]
 - useHostProxy > isUseHostProxyEnabled() ([microsoft/vscode-copilot-release#3821](https://github.com/microsoft/vscode-copilot-release/issues/3821))
 

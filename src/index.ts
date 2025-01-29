@@ -16,6 +16,7 @@ import * as undici from 'undici';
 import * as stream from 'stream';
 
 import { createPacProxyAgent, getProxyURLFromResolverResult, PacProxyAgent } from './agent';
+import type { IncomingHttpHeaders } from 'undici/types/header';
 
 export enum LogLevel {
 	Trace,
@@ -608,17 +609,12 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 				proxyTls: proxyCA ? { allowH2, ca: proxyCA } : { allowH2 },
 				clientFactory: (origin: URL, opts: object): undici.Dispatcher => (new undici.Pool(origin, opts) as any).compose((dispatch: undici.Dispatcher['dispatch']) => {
 					class ProxyAuthHandler extends undici.DecoratorHandler {
-						private abort: ((err?: Error) => void) | undefined;
 						constructor(private dispatch: undici.Dispatcher['dispatch'], private options: undici.Dispatcher.DispatchOptions, private handler: undici.Dispatcher.DispatchHandler) {
 							super(handler);
 						}
-						onConnect(abort: (err?: Error) => void): void {
-							this.abort = abort;
-							this.handler.onConnect?.(abort);
-						}
-						onError(err: Error): void {
+						onResponseError(controller: undici.Dispatcher.DispatchController, err: Error): void {
 							if (!(err instanceof ProxyAuthError)) {
-								return this.handler.onError?.(err);
+								return this.handler.onResponseError?.(controller, err);
 							}
 							(async () => {
 								try {
@@ -647,27 +643,28 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 										}
 										this.dispatch(this.options, this);
 									} else {
-										this.handler.onError?.(new undici.errors.RequestAbortedError(`Proxy response (407) ?.== 200 when HTTP Tunneling`)); // Mimick undici's behavior
+										this.handler.onResponseError?.(controller, new undici.errors.RequestAbortedError(`Proxy response (407) ?.== 200 when HTTP Tunneling`)); // Mimick undici's behavior
 									}
 								} catch (err: any) {
-									this.handler.onError?.(err);
+									this.handler.onResponseError?.(controller, err);
 								}
 							})();
 						}
-						onUpgrade(statusCode: number, headers: Buffer[] | string[] | null, socket: stream.Duplex): void {
+						onRequestUpgrade?(controller: undici.Dispatcher.DispatchController, statusCode: number, headers: IncomingHttpHeaders, socket: stream.Duplex): void {
 							if (statusCode === 407 && headers) {
-								const proxyAuthenticate: string[] = [];
-								for (let i = 0; i < headers.length; i += 2) {
-									if (headers[i].toString().toLowerCase() === 'proxy-authenticate') {
-										proxyAuthenticate.push(headers[i + 1].toString());
+								let proxyAuthenticate: string | string[] | undefined;
+								for (const header in headers) {
+									if (header.toLowerCase() === 'proxy-authenticate') {
+										proxyAuthenticate = headers[header];
+										break;
 									}
 								}
-								if (proxyAuthenticate.length) {
-									this.abort?.(new ProxyAuthError(proxyAuthenticate));
+								if (proxyAuthenticate) {
+									controller.abort(new ProxyAuthError(proxyAuthenticate));
 									return;
 								}
 							}
-							this.handler.onUpgrade?.(statusCode, headers, socket);
+							this.handler.onRequestUpgrade?.(controller, statusCode, headers, socket);
 						}
 					}
 					return function proxyAuthDispatch(options: undici.Dispatcher.DispatchOptions, handler: undici.Dispatcher.DispatchHandler) {
@@ -681,7 +678,7 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 }
 
 class ProxyAuthError extends Error {
-	constructor(public proxyAuthenticate: string[]) {
+	constructor(public proxyAuthenticate: string | string[]) {
 		super('Proxy authentication required');
 	}
 }
