@@ -3,7 +3,7 @@ import * as undici from 'undici';
 import * as assert from 'assert';
 import * as vpa from '../../..';
 import { createPacProxyAgent } from '../../../src/agent';
-import { testRequest, ca, unusedCa, proxiedProxyAgentParamsV1, tlsProxiedProxyAgentParamsV1 } from './utils';
+import { testRequest, ca, unusedCa, proxiedProxyAgentParamsV1, tlsProxiedProxyAgentParamsV1, directProxyAgentParamsV1 } from './utils';
 
 describe('Proxied client', function () {
 	it('should use HTTP proxy for HTTPS connection', function () {
@@ -45,6 +45,18 @@ describe('Proxied client', function () {
 		});
 	});
 
+	it('should support basic auth (fetch)', async function () {
+		const params: vpa.ProxyAgentParams = {
+			...directProxyAgentParamsV1,
+			resolveProxy: async () => 'PROXY foo:bar@test-http-auth-proxy:3128',
+		};
+		const { resolveProxyURL } = vpa.createProxyResolver(params);
+		const patchedFetch = vpa.createFetchPatch(params, globalThis.fetch, resolveProxyURL);
+		const res = await patchedFetch('https://test-https-server/test-path');
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual((await res.json()).status, 'OK!');
+	});
+
 	it('should fail with 407 when auth is missing', async function () {
 		try {
 			await testRequest(https, {
@@ -55,6 +67,22 @@ describe('Proxied client', function () {
 			});
 		} catch (err) {
 			assert.strictEqual((err as any).statusCode, 407);
+			return;
+		}
+		assert.fail('Should have failed');
+	});
+
+	it('should fail with 407 when auth is missing (fetch)', async function () {
+		try {
+			const params: vpa.ProxyAgentParams = {
+				...directProxyAgentParamsV1,
+				resolveProxy: async () => 'PROXY test-http-auth-proxy:3128',
+			};
+			const { resolveProxyURL } = vpa.createProxyResolver(params);
+			const patchedFetch = vpa.createFetchPatch(params, globalThis.fetch, resolveProxyURL);
+			await patchedFetch('https://test-https-server/test-path');
+		} catch (err: any) {
+			assert.strictEqual(err?.cause?.cause?.message, 'Proxy response (407) ?.== 200 when HTTP Tunneling');
 			return;
 		}
 		assert.fail('Should have failed');
@@ -78,6 +106,26 @@ describe('Proxied client', function () {
 		});
 	});
 
+	it('should call auth callback after 407 (fetch)', async function () {
+		const params: vpa.ProxyAgentParams = {
+			...directProxyAgentParamsV1,
+			resolveProxy: async () => 'PROXY test-http-auth-proxy:3128',
+			async lookupProxyAuthorization(proxyURL, proxyAuthenticate) {
+				assert.strictEqual(proxyURL, 'http://test-http-auth-proxy:3128'); // TODO: Investigate why there is no trailing slash like with the https module.
+				if (!proxyAuthenticate) {
+					return;
+				}
+				assert.strictEqual(proxyAuthenticate, 'Basic realm="Squid Basic Authentication"');
+				return `Basic ${Buffer.from('foo:bar').toString('base64')}`;
+			},
+		};
+		const { resolveProxyURL } = vpa.createProxyResolver(params);
+		const patchedFetch = vpa.createFetchPatch(params, globalThis.fetch, resolveProxyURL);
+		const res = await patchedFetch('https://test-https-server/test-path');
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual((await res.json()).status, 'OK!');
+	});
+
 	it('should call auth callback before request', function () {
 		return testRequest(https, {
 			hostname: 'test-https-server',
@@ -91,6 +139,23 @@ describe('Proxied client', function () {
 			}),
 			ca,
 		});
+	});
+
+	it('should call auth callback before request (fetch)', async function () {
+		const params: vpa.ProxyAgentParams = {
+			...directProxyAgentParamsV1,
+			resolveProxy: async () => 'PROXY test-http-auth-proxy:3128',
+			async lookupProxyAuthorization(proxyURL, proxyAuthenticate) {
+				assert.strictEqual(proxyURL, 'http://test-http-auth-proxy:3128'); // TODO: Investigate why there is no trailing slash like with the https module.
+				assert.strictEqual(proxyAuthenticate, undefined);
+				return `Basic ${Buffer.from('foo:bar').toString('base64')}`;
+			},
+		};
+		const { resolveProxyURL } = vpa.createProxyResolver(params);
+		const patchedFetch = vpa.createFetchPatch(params, globalThis.fetch, resolveProxyURL);
+		const res = await patchedFetch('https://test-https-server/test-path');
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual((await res.json()).status, 'OK!');
 	});
 
 	it('should pass state around', async function () {
@@ -109,6 +174,27 @@ describe('Proxied client', function () {
 			}),
 			ca,
 		});
+		assert.strictEqual(count, 3);
+	});
+
+	it('should pass state around (fetch)', async function () {
+		let count = 0;
+		const params: vpa.ProxyAgentParams = {
+			...directProxyAgentParamsV1,
+			resolveProxy: async () => 'PROXY test-http-auth-proxy:3128',
+			async lookupProxyAuthorization(proxyURL, proxyAuthenticate, state: { count?: number }) {
+				assert.strictEqual(proxyURL, 'http://test-http-auth-proxy:3128'); // TODO: Investigate why there is no trailing slash like with the https module.
+				assert.strictEqual(proxyAuthenticate, state.count ? 'Basic realm="Squid Basic Authentication"' : undefined);
+				const credentials = state.count === 2 ? 'foo:bar' : 'foo:wrong';
+				count = state.count = (state.count || 0) + 1;
+				return `Basic ${Buffer.from(credentials).toString('base64')}`;
+			},
+		};
+		const { resolveProxyURL } = vpa.createProxyResolver(params);
+		const patchedFetch = vpa.createFetchPatch(params, globalThis.fetch, resolveProxyURL);
+		const res = await patchedFetch('https://test-https-server/test-path');
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual((await res.json()).status, 'OK!');
 		assert.strictEqual(count, 3);
 	});
 
@@ -132,6 +218,28 @@ describe('Proxied client', function () {
 		});
 	});
 	
+	it('should work with kerberos (fetch)', async function () {
+		this.timeout(10000);
+		const proxyAuthenticateCache = {};
+		const params: vpa.ProxyAgentParams = {
+			...directProxyAgentParamsV1,
+			resolveProxy: async () => 'PROXY test-http-kerberos-proxy:80',
+			async lookupProxyAuthorization(proxyURL, proxyAuthenticate, state) {
+				assert.strictEqual(proxyURL, 'http://test-http-kerberos-proxy:80'); // TODO: Investigate why there is no trailing slash like with the https module.
+				if (proxyAuthenticate) {
+					assert.strictEqual(proxyAuthenticate, 'Negotiate');
+				}
+				const log = { ...console, trace: console.log };
+				return lookupProxyAuthorization(log, log, proxyAuthenticateCache, true, proxyURL, proxyAuthenticate, state);
+			},
+		};
+		const { resolveProxyURL } = vpa.createProxyResolver(params);
+		const patchedFetch = vpa.createFetchPatch(params, globalThis.fetch, resolveProxyURL);
+		const res = await patchedFetch('https://test-https-server/test-path');
+		assert.strictEqual(res.status, 200);
+		assert.strictEqual((await res.json()).status, 'OK!');
+	});
+
 	it('should use system certificates', async function () {
 		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
 		const patchedHttps: typeof https = {
