@@ -15,7 +15,7 @@
     "@types/mocha": "5.2.5",
     "@types/node": "^20.8.4",
     "kerberos": "^2.0.1",
-    "mocha": "10.2.0",
+    "mocha": "10.8.2",
     "ts-node": "9.1.1",
     "typescript": "^5.2.2",
     "undici": "^7.2.0"
