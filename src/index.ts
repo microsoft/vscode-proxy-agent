@@ -573,7 +573,7 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 		}
 		const proxySupport = params.getProxySupport();
 		const doResolveProxy = proxySupport === 'override' || proxySupport === 'fallback' || (proxySupport === 'on' && ((init as any)?.dispatcher) === undefined);
-		const addCerts = params.addCertificatesV1();
+		const addCerts = params.addCertificatesV1() || params.addCertificatesV2(); // There is no v2 for `fetch`, checking both settings.
 		if (!doResolveProxy && !addCerts) {
 			return originalFetch(input, init);
 		}
