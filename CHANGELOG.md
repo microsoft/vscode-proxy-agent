@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.32.0]
+- Check both system certificates settings for `fetch` ([microsoft/vscode-proxy-agent#66](https://github.com/microsoft/vscode-proxy-agent/pull/66))
+
 ## [0.31.0]
 - Fix basic auth for fetch ([microsoft/vscode#239033](https://github.com/microsoft/vscode/issues/239033))
 
