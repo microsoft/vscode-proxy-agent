@@ -178,7 +178,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 				callback('DIRECT');
 				log.debug('ProxyResolver#resolveProxy envNoProxy', url, 'DIRECT', stackText);
 				return;
-			}	
+			}
 		}
 
 		let settingsProxy = proxyFromConfigURL(getProxyURL());
@@ -392,10 +392,14 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 				const resolveP = (req: http.ClientRequest, opts: http.RequestOptions, url: string): Promise<string | undefined> => new Promise<string | undefined>(resolve => resolveProxy({ useProxySettings, addCertificatesV1 }, req, opts, url, resolve));
 				const host = options.hostname || options.host;
 				const isLocalhost = !host || host === 'localhost' || host === '127.0.0.1'; // Avoiding https://github.com/microsoft/vscode/issues/120354
+				let keepAlive: boolean | undefined = false
+				if ((originalAgent instanceof originals.Agent) && originalAgent !== originals.globalAgent) {
+					keepAlive = (originalAgent as {keepAlive?: boolean}).keepAlive
+				}
 				const agent = createPacProxyAgent(resolveP, {
 					originalAgent: (!useProxySettings || isLocalhost || config === 'fallback') ? originalAgent : undefined,
 					lookupProxyAuthorization: params.lookupProxyAuthorization,
-					// keepAlive: ((originalAgent || originals.globalAgent) as { keepAlive?: boolean }).keepAlive, // Skipping due to https://github.com/microsoft/vscode/issues/228872.
+					keepAlive,
 					_vscodeTestReplaceCaCerts: (options as SecureContextOptionsPatch)._vscodeTestReplaceCaCerts,
 				}, opts => new Promise<void>(resolve => addCertificatesToOptionsV1(params, params.addCertificatesV1(), opts, resolve)));
 				agent.protocol = isHttps ? 'https:' : 'http:';
@@ -424,9 +428,9 @@ export function createNetPatch(params: ProxyAgentParams, originals: typeof net) 
 }
 
 function patchNetConnect(params: ProxyAgentParams, original: typeof net.connect): typeof net.connect {
-    function connect(options: net.NetConnectOpts, connectionListener?: () => void): net.Socket;
-    function connect(port: number, host?: string, connectionListener?: () => void): net.Socket;
-    function connect(path: string, connectionListener?: () => void): net.Socket;
+	function connect(options: net.NetConnectOpts, connectionListener?: () => void): net.Socket;
+	function connect(port: number, host?: string, connectionListener?: () => void): net.Socket;
+	function connect(path: string, connectionListener?: () => void): net.Socket;
 	function connect(...args: any[]): net.Socket {
 		if (params.getLogLevel() === LogLevel.Trace) {
 			params.log.trace('ProxyResolver#net.connect', toLogString(args));
@@ -487,7 +491,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 		}
 		const port = typeof args[0] === 'number' ? args[0]
 			: typeof args[0] === 'string' && !isNaN(Number(args[0])) ? Number(args[0]) // E.g., http2 module passes port as string.
-			: options.port;
+				: options.port;
 		const host = typeof args[1] === 'string' ? args[1] : options.host;
 		let tlsSocket: tls.TLSSocket;
 		if (options.socket) {
@@ -496,7 +500,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 			}
 			if (!_certificates) {
 				params.log.trace('ProxyResolver#tls.connect waiting for existing socket connect');
-				options.socket.once('connect' , () => {
+				options.socket.once('connect', () => {
 					params.log.trace('ProxyResolver#tls.connect got existing socket connect - adding certs');
 					for (const cert of _certificates || []) {
 						options!.secureContext!.context.addCACert(cert);
@@ -909,32 +913,32 @@ function toErrorMessage(err: any) {
 
 export function toLogString(args: any[]) {
 	return `[${args.map(arg => JSON.stringify(arg, (key, value) => {
-			const t = typeof value;
-			if (t === 'object') {
-				if (key) {
-					if ((key === 'ca' || key === '_vscodeAdditionalCaCerts') && Array.isArray(value)) {
-						return `[${value.length} certs]`;
-					}
-					if (key === 'ca' && (typeof value === 'string' || Buffer.isBuffer(value))) {
-						return `[${(value.toString().match(/-----BEGIN CERTIFICATE-----/g) || []).length} certs]`;
-					}
-					return !value || value.toString ? String(value) : Object.prototype.toString.call(value);
-				} else {
-					return value;
+		const t = typeof value;
+		if (t === 'object') {
+			if (key) {
+				if ((key === 'ca' || key === '_vscodeAdditionalCaCerts') && Array.isArray(value)) {
+					return `[${value.length} certs]`;
 				}
+				if (key === 'ca' && (typeof value === 'string' || Buffer.isBuffer(value))) {
+					return `[${(value.toString().match(/-----BEGIN CERTIFICATE-----/g) || []).length} certs]`;
+				}
+				return !value || value.toString ? String(value) : Object.prototype.toString.call(value);
+			} else {
+				return value;
 			}
-			if (t === 'function') {
-				return `[Function: ${value.name}]`;
-			}
-			if (t === 'bigint') {
-				return String(value);
-			}
-			if (t === 'string' && value.length > 25) {
-				const len = `[${value.length} chars]`;
-				return `${value.substr(0, 25 - len.length)}${len}`;
-			}
-			return value;
-		})).join(', ')}]`;
+		}
+		if (t === 'function') {
+			return `[Function: ${value.name}]`;
+		}
+		if (t === 'bigint') {
+			return String(value);
+		}
+		if (t === 'string' && value.length > 25) {
+			const len = `[${value.length} chars]`;
+			return `${value.substr(0, 25 - len.length)}${len}`;
+		}
+		return value;
+	})).join(', ')}]`;
 }
 
 /**

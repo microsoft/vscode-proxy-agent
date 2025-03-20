@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.32.1]
+- Make keepAlive flag opt-in ([microsoft/vscode-proxy-agent#243482](https://github.com/microsoft/vscode/issues/243482))
+
 ## [0.32.0]
 - Check both system certificates settings for `fetch` ([microsoft/vscode-proxy-agent#66](https://github.com/microsoft/vscode-proxy-agent/pull/66))
 
