@@ -158,8 +158,7 @@ describe('Direct client', function () {
 		});
 		assert.ok(seen, 'Original agent not called!');
 	});
-	it.skip('should reuse socket with agent', async function () {
-		// Skipping due to https://github.com/microsoft/vscode/issues/228872.
+	it('should reuse socket with agent', async function () {
 		// https://github.com/microsoft/vscode/issues/173861
 		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParams);
 		const patchedHttps: typeof https = {
