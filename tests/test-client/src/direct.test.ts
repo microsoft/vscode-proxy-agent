@@ -320,4 +320,24 @@ describe('Direct client', function () {
 		assert.strictEqual(res.status, 200);
 		assert.strictEqual((await res.json()).status, 'OK HTTP2!');
 	});
+	it('should call original checkServerIdentity function', async function() {
+		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParamsV1);
+		const patchedHttps: typeof https = {
+			...https,
+			...vpa.createHttpPatch(directProxyAgentParamsV1, https, resolveProxy),
+		} as any;
+		try {
+			const res = await testRequest(patchedHttps, {
+				hostname: 'test-https-server',
+				path: '/test-path',
+				ca,
+				agent:  new https.Agent({
+					checkServerIdentity: () => new Error("Certificate pinning failed"),
+				}),
+			});
+			assert.fail('Expected to fail with ertificate pinning failed');
+		} catch (err: any) {
+			assert.strictEqual(err?.message, 'Certificate pinning failed');
+		}
+	})
 });
