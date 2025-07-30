@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.32.1]
+- Call checkServerIdentity from original agent
+
 ## [0.32.0]
 - Check both system certificates settings for `fetch` ([microsoft/vscode-proxy-agent#66](https://github.com/microsoft/vscode-proxy-agent/pull/66))
 
