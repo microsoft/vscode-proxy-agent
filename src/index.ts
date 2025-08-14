@@ -875,6 +875,7 @@ const linuxCaCertificatePaths = [
 	'/etc/ssl/certs/ca-certificates.crt', // Debian / Ubuntu / Alpine / Fedora
 	'/etc/ssl/certs/ca-bundle.crt', // Fedora
 	'/etc/ssl/ca-bundle.pem', // OpenSUSE
+	'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem', // Fedora 43+
 ];
 
 async function readLinuxCaCertificates() {
