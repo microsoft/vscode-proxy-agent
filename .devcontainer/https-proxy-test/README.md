@@ -6,4 +6,4 @@
 - Install GitHub Copilot Chat and use `Developer: GitHub Copilot Chat Diagnostics` to test connections with a HTTPS proxy. Use a second window to test connections from a local extension host.
 - Verify in the log terminal of the dev container that the proxy is being used.
 
-Note: Due to an issue in mitmproxy, Electron's `fetch` currently doesn't work. Add the user setting `"github.copilot.advanced.debug.useElectronFetcher": false` as a workaround.
+Note: Due to an issue in mitmproxy (https://github.com/python-hyper/h2/issues/319), Electron's `fetch` currently doesn't work. Add the user setting `"github.copilot.advanced.debug.useElectronFetcher": false` as a workaround.
