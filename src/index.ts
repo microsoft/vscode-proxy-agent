@@ -370,6 +370,8 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 			// If Agent.options.ca is set to undefined, it overwrites RequestOptions.ca.
 			const originalOptionsCa = isHttps ? (options as https.RequestOptions).ca : undefined;
 			const originalAgentCa = isHttps && originalAgent instanceof originals.Agent && (originalAgent as https.Agent).options && 'ca' in (originalAgent as https.Agent).options && (originalAgent as https.Agent).options.ca;
+			const originalAgentCheckServerIdentity = isHttps && originalAgent instanceof originals.Agent && (originalAgent as https.Agent).options && 'checkServerIdentity' in (originalAgent as https.Agent).options && (originalAgent as https.Agent).options.checkServerIdentity;
+			const originalCheckServerIdentity = originalAgentCheckServerIdentity !== false ? originalAgentCheckServerIdentity : undefined;
 			const originalCa = originalAgentCa !== false ? originalAgentCa : originalOptionsCa;
 			const addCertificatesV1 = !optionsPatched && params.addCertificatesV1() && isHttps && !originalCa;
 
@@ -396,6 +398,7 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 					originalAgent: (!useProxySettings || isLocalhost || config === 'fallback') ? originalAgent : undefined,
 					lookupProxyAuthorization: params.lookupProxyAuthorization,
 					// keepAlive: ((originalAgent || originals.globalAgent) as { keepAlive?: boolean }).keepAlive, // Skipping due to https://github.com/microsoft/vscode/issues/228872.
+					checkServerIdentity: (host, cert) => originalCheckServerIdentity?.(host, cert),
 					_vscodeTestReplaceCaCerts: (options as SecureContextOptionsPatch)._vscodeTestReplaceCaCerts,
 				}, opts => new Promise<void>(resolve => addCertificatesToOptionsV1(params, params.addCertificatesV1(), opts, resolve)));
 				agent.protocol = isHttps ? 'https:' : 'http:';
