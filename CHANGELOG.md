@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.33.0]
+- Add certificate path for Fedora 43+ ([microsoft/vscode#261433](https://github.com/microsoft/vscode/issues/261433))
+
 ## [0.32.0]
 - Check both system certificates settings for `fetch` ([microsoft/vscode-proxy-agent#66](https://github.com/microsoft/vscode-proxy-agent/pull/66))
 
