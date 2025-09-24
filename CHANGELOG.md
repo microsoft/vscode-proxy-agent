@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.34.0]
+- Cache agent instances ([microsoft/vscode-proxy-agent#77](https://github.com/microsoft/vscode-proxy-agent/pull/77))
+
 ## [0.33.0]
 - Add certificate path for Fedora 43+ ([microsoft/vscode#261433](https://github.com/microsoft/vscode/issues/261433))
 
