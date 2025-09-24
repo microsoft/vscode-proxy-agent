@@ -589,92 +589,167 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 		if (!proxyURL) {
 			const modifiedInit = {
 				...init,
-				dispatcher: new undici.Agent({
-					allowH2,
-					connect: { ca: requestCA },
-				})
+				dispatcher: getAgent(agentOptions.dispatcher, allowH2, requestCA, addCerts),
 			};
 			return originalFetch(input, modifiedInit);
 		}
 
 		const state: Record<string, any> = {};
-		const proxyAuthorization = await params.lookupProxyAuthorization?.(proxyURL, undefined, state);
 		const modifiedInit = {
 			...init,
-			dispatcher: new undici.ProxyAgent({
-				uri: proxyURL,
-				allowH2,
-				headers: proxyAuthorization ? { 'Proxy-Authorization': proxyAuthorization } : undefined,
-				requestTls: requestCA ? { allowH2, ca: requestCA } : { allowH2 },
-				proxyTls: proxyCA ? { allowH2, ca: proxyCA } : { allowH2 },
-				clientFactory: (origin: URL, opts: object): undici.Dispatcher => (new undici.Pool(origin, opts) as any).compose((dispatch: undici.Dispatcher['dispatch']) => {
-					class ProxyAuthHandler extends undici.DecoratorHandler {
-						constructor(private dispatch: undici.Dispatcher['dispatch'], private options: undici.Dispatcher.DispatchOptions, private handler: undici.Dispatcher.DispatchHandler) {
-							super(handler);
-						}
-						onResponseError(controller: undici.Dispatcher.DispatchController, err: Error): void {
-							if (!(err instanceof ProxyAuthError)) {
-								return this.handler.onResponseError?.(controller, err);
-							}
-							(async () => {
-								try {
-									const proxyAuthorization = await params.lookupProxyAuthorization?.(proxyURL!, err.proxyAuthenticate, state);
-									if (proxyAuthorization) {
-										if (!this.options.headers) {
-											this.options.headers = ['Proxy-Authorization', proxyAuthorization];
-										} else if (Array.isArray(this.options.headers)) {
-											const i = this.options.headers.findIndex((value, index) => index % 2 === 0 && value.toLowerCase() === 'proxy-authorization');
-											if (i === -1) {
-												this.options.headers.push('Proxy-Authorization', proxyAuthorization);
-											} else {
-												this.options.headers[i + 1] = proxyAuthorization;
-											}
-										} else if (typeof (this.options.headers as any)[Symbol.iterator] === 'function') {
-											const headers = [...(this.options.headers as Iterable<[string, string | string[] | undefined]>)];
-											const i = headers.findIndex(value => value[0].toLowerCase() === 'proxy-authorization');
-											if (i === -1) {
-												headers.push(['Proxy-Authorization', proxyAuthorization]);
-											} else {
-												headers[i][1] = proxyAuthorization;
-											}
-											this.options.headers = headers;
-										} else {
-											(this.options.headers as Record<string, string | string[] | undefined>)['Proxy-Authorization'] = proxyAuthorization;
-										}
-										this.dispatch(this.options, this);
-									} else {
-										this.handler.onResponseError?.(controller, new undici.errors.RequestAbortedError(`Proxy response (407) ?.== 200 when HTTP Tunneling`)); // Mimick undici's behavior
-									}
-								} catch (err: any) {
-									this.handler.onResponseError?.(controller, err);
-								}
-							})();
-						}
-						onRequestUpgrade?(controller: undici.Dispatcher.DispatchController, statusCode: number, headers: IncomingHttpHeaders, socket: stream.Duplex): void {
-							if (statusCode === 407 && headers) {
-								let proxyAuthenticate: string | string[] | undefined;
-								for (const header in headers) {
-									if (header.toLowerCase() === 'proxy-authenticate') {
-										proxyAuthenticate = headers[header];
-										break;
-									}
-								}
-								if (proxyAuthenticate) {
-									controller.abort(new ProxyAuthError(proxyAuthenticate));
-									return;
-								}
-							}
-							this.handler.onRequestUpgrade?.(controller, statusCode, headers, socket);
-						}
-					}
-					return function proxyAuthDispatch(options: undici.Dispatcher.DispatchOptions, handler: undici.Dispatcher.DispatchHandler) {
-						return dispatch(options, new ProxyAuthHandler(dispatch, options, handler));
-					};
-				}),
-			})
+			dispatcher: await getProxyAgent(params, agentOptions.dispatcher, proxyURL, allowH2, requestCA, proxyCA, addCerts, state),
 		};
 		return originalFetch(input, modifiedInit);
 	};
+}
+
+let previousAddCertsAgent: boolean | undefined = undefined;
+let defaultAgent: undici.Agent | undefined = undefined;
+let agentCache = new WeakMap<undici.Dispatcher, undici.Agent>();
+function getAgent(originalDispatcher: undici.Dispatcher | undefined, allowH2: boolean | undefined, requestCA: string | Buffer | (string | Buffer)[] | undefined, currentAddCerts: boolean): undici.Agent | undefined {
+	if (previousAddCertsAgent !== currentAddCerts) {
+		previousAddCertsAgent = currentAddCerts;
+		defaultAgent = undefined;
+		agentCache = new WeakMap<undici.Dispatcher, undici.Agent>();
+	}
+	if (!originalDispatcher) {
+		if (!defaultAgent) {
+			defaultAgent = createAgent(allowH2, requestCA);
+		}
+		return defaultAgent;
+	}
+
+	if (!agentCache.has(originalDispatcher)) {
+		agentCache.set(originalDispatcher, createAgent(allowH2, requestCA));
+	}
+	return agentCache.get(originalDispatcher);
+}
+
+function createAgent(allowH2: boolean | undefined, requestCA: string | Buffer | (string | Buffer)[] | undefined) {
+	return new undici.Agent({
+		allowH2,
+		connect: { ca: requestCA },
+	});
+}
+
+let previousAddCertsProxyAgent: boolean | undefined = undefined;
+let defaultProxyAgent: undici.ProxyAgent | undefined = undefined;
+let proxyAgentCache = new WeakMap<undici.Dispatcher, Map<string, undici.ProxyAgent>>();
+async function getProxyAgent(
+	params: ProxyAgentParams,
+	originalDispatcher: undici.Dispatcher | undefined,
+	proxyURL: string,
+	allowH2: boolean | undefined,
+	requestCA: string | Buffer | (string | Buffer)[] | undefined,
+	proxyCA: string | Buffer | (string | Buffer)[] | undefined,
+	currentAddCerts: boolean,
+	state: Record<string, any>
+): Promise<undici.ProxyAgent> {
+	if (previousAddCertsProxyAgent !== currentAddCerts) {
+		previousAddCertsProxyAgent = currentAddCerts;
+		defaultProxyAgent = undefined;
+		proxyAgentCache = new WeakMap<undici.Dispatcher, Map<string, undici.ProxyAgent>>();
+	}
+
+	if (!originalDispatcher) {
+		if (!defaultProxyAgent) {
+			defaultProxyAgent = await createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA, state);
+		}
+		return defaultProxyAgent;
+	}
+
+	let dispatcherCache = proxyAgentCache.get(originalDispatcher);
+	if (!dispatcherCache) {
+		dispatcherCache = new Map<string, undici.ProxyAgent>();
+		proxyAgentCache.set(originalDispatcher, dispatcherCache);
+	}
+
+	if (!dispatcherCache.has(proxyURL)) {
+		dispatcherCache.set(proxyURL, await createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA, state));
+	}
+	return dispatcherCache.get(proxyURL)!;
+}
+
+async function createProxyAgent(
+	params: ProxyAgentParams,
+	proxyURL: string,
+	allowH2: boolean | undefined,
+	requestCA: string | Buffer | (string | Buffer)[] | undefined,
+	proxyCA: string | Buffer | (string | Buffer)[] | undefined,
+	state: Record<string, any>
+): Promise<undici.ProxyAgent> {
+	const proxyAuthorization = await params.lookupProxyAuthorization?.(proxyURL, undefined, state);
+	return new undici.ProxyAgent({
+		uri: proxyURL,
+		allowH2,
+		headers: proxyAuthorization ? { 'Proxy-Authorization': proxyAuthorization } : undefined,
+		requestTls: requestCA ? { allowH2, ca: requestCA } : { allowH2 },
+		proxyTls: proxyCA ? { allowH2, ca: proxyCA } : { allowH2 },
+		clientFactory: (origin: URL, opts: object): undici.Dispatcher => (new undici.Pool(origin, opts) as any).compose((dispatch: undici.Dispatcher['dispatch']) => {
+			class ProxyAuthHandler extends undici.DecoratorHandler {
+				constructor(private dispatch: undici.Dispatcher['dispatch'], private options: undici.Dispatcher.DispatchOptions, private handler: undici.Dispatcher.DispatchHandler) {
+					super(handler);
+				}
+				onResponseError(controller: undici.Dispatcher.DispatchController, err: Error): void {
+					if (!(err instanceof ProxyAuthError)) {
+						return this.handler.onResponseError?.(controller, err);
+					}
+					(async () => {
+						try {
+							const proxyAuthorization = await params.lookupProxyAuthorization?.(proxyURL!, err.proxyAuthenticate, state);
+							if (proxyAuthorization) {
+								if (!this.options.headers) {
+									this.options.headers = ['Proxy-Authorization', proxyAuthorization];
+								} else if (Array.isArray(this.options.headers)) {
+									const i = this.options.headers.findIndex((value, index) => index % 2 === 0 && value.toLowerCase() === 'proxy-authorization');
+									if (i === -1) {
+										this.options.headers.push('Proxy-Authorization', proxyAuthorization);
+									} else {
+										this.options.headers[i + 1] = proxyAuthorization;
+									}
+								} else if (typeof (this.options.headers as any)[Symbol.iterator] === 'function') {
+									const headers = [...(this.options.headers as Iterable<[string, string | string[] | undefined]>)];
+									const i = headers.findIndex(value => value[0].toLowerCase() === 'proxy-authorization');
+									if (i === -1) {
+										headers.push(['Proxy-Authorization', proxyAuthorization]);
+									} else {
+										headers[i][1] = proxyAuthorization;
+									}
+									this.options.headers = headers;
+								} else {
+									(this.options.headers as Record<string, string | string[] | undefined>)['Proxy-Authorization'] = proxyAuthorization;
+								}
+								this.dispatch(this.options, this);
+							} else {
+								this.handler.onResponseError?.(controller, new undici.errors.RequestAbortedError(`Proxy response (407) ?.== 200 when HTTP Tunneling`)); // Mimick undici's behavior
+							}
+						} catch (err: any) {
+							this.handler.onResponseError?.(controller, err);
+						}
+					})();
+				}
+				onRequestUpgrade?(controller: undici.Dispatcher.DispatchController, statusCode: number, headers: IncomingHttpHeaders, socket: stream.Duplex): void {
+					if (statusCode === 407 && headers) {
+						let proxyAuthenticate: string | string[] | undefined;
+						for (const header in headers) {
+							if (header.toLowerCase() === 'proxy-authenticate') {
+								proxyAuthenticate = headers[header];
+								break;
+							}
+						}
+						if (proxyAuthenticate) {
+							controller.abort(new ProxyAuthError(proxyAuthenticate));
+							return;
+						}
+					}
+					this.handler.onRequestUpgrade?.(controller, statusCode, headers, socket);
+				}
+			}
+			return function proxyAuthDispatch(options: undici.Dispatcher.DispatchOptions, handler: undici.Dispatcher.DispatchHandler) {
+				return dispatch(options, new ProxyAuthHandler(dispatch, options, handler));
+			};
+		}),
+	});
 }
 
 class ProxyAuthError extends Error {
@@ -752,7 +827,7 @@ function getAgentOptions(requestInit: RequestInit | undefined) {
 		requestCA = originalProxyAgentOptions.requestTls && 'ca' in originalProxyAgentOptions.requestTls && originalProxyAgentOptions.requestTls.ca || undefined;
 		proxyCA = originalProxyAgentOptions.proxyTls && 'ca' in originalProxyAgentOptions.proxyTls && originalProxyAgentOptions.proxyTls.ca || undefined;
 	}
-	return { allowH2, requestCA, proxyCA, socketPath };
+	return { dispatcher, allowH2, requestCA, proxyCA, socketPath };
 }
 
 function addCertificatesToOptionsV1(params: ProxyAgentParams, addCertificatesV1: boolean, opts: http.RequestOptions | tls.ConnectionOptions, callback: () => void) {
