@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.35.0]
+- Flush proxy cache when network interfaces changed ([microsoft/vscode-proxy-agent#79](https://github.com/microsoft/vscode-proxy-agent/pull/79))
+
 ## [0.34.0]
 - Cache agent instances ([microsoft/vscode-proxy-agent#77](https://github.com/microsoft/vscode-proxy-agent/pull/77))
 
