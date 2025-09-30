@@ -76,6 +76,7 @@ export interface ProxyAgentParams {
 	getLogLevel(): LogLevel;
 	proxyResolveTelemetry(event: ProxyResolveEvent): void;
 	isUseHostProxyEnabled: () => boolean;
+	getNetworkInterfaceCheckInterval?: () => number;
 	env: NodeJS.ProcessEnv;
 }
 
@@ -88,11 +89,38 @@ export function createProxyResolver(params: ProxyAgentParams) {
 	let cacheRolls = 0;
 	let oldCache = new Map<string, string>();
 	let cache = new Map<string, string>();
+
+	let lastNetworkInterfacesCheck = 0;
+	let lastNetworkInterfacesSnapshot: string | undefined;
+
+	function checkAndFlushCacheIfNetworkChanged() {
+		const intervalMs = params.getNetworkInterfaceCheckInterval?.() ?? -1;
+		if (intervalMs < 0) {
+			return;
+		}
+		const now = Date.now();
+		if (now - lastNetworkInterfacesCheck >= intervalMs) {
+			lastNetworkInterfacesCheck = now;
+			const currentSnapshot = JSON.stringify(os.networkInterfaces());
+			if (lastNetworkInterfacesSnapshot) {
+				if (lastNetworkInterfacesSnapshot !== currentSnapshot) {
+					log.debug('ProxyResolver#getCachedProxy network interfaces changed, flushing cache');
+					cache.clear();
+					oldCache.clear();
+				} else {
+					log.debug('ProxyResolver#getCachedProxy network interfaces unchanged');
+				}
+			}
+			lastNetworkInterfacesSnapshot = currentSnapshot;
+		}
+	}
+
 	function getCacheKey(url: nodeurl.UrlWithStringQuery) {
 		// Expecting proxies to usually be the same per scheme://host:port. Assuming that for performance.
 		return nodeurl.format({ ...url, ...{ pathname: undefined, search: undefined, hash: undefined } });
 	}
 	function getCachedProxy(key: string) {
+		checkAndFlushCacheIfNetworkChanged();
 		let proxy = cache.get(key);
 		if (proxy) {
 			return proxy;
