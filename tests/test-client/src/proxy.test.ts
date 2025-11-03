@@ -80,7 +80,9 @@ describe('Proxied client', function () {
 			};
 			const { resolveProxyURL } = vpa.createProxyResolver(params);
 			const patchedFetch = vpa.createFetchPatch(params, globalThis.fetch, resolveProxyURL);
-			await patchedFetch('https://test-https-server/test-path');
+			await patchedFetch('https://test-https-server/test-path', {
+				dispatcher: new undici.Agent(),
+			} as any);
 		} catch (err: any) {
 			assert.strictEqual(err?.cause?.cause?.message, 'Proxy response (407) ?.== 200 when HTTP Tunneling');
 			return;
@@ -192,7 +194,9 @@ describe('Proxied client', function () {
 		};
 		const { resolveProxyURL } = vpa.createProxyResolver(params);
 		const patchedFetch = vpa.createFetchPatch(params, globalThis.fetch, resolveProxyURL);
-		const res = await patchedFetch('https://test-https-server/test-path');
+		const res = await patchedFetch('https://test-https-server/test-path', {
+			dispatcher: new undici.Agent(),
+		} as any);
 		assert.strictEqual(res.status, 200);
 		assert.strictEqual((await res.json()).status, 'OK!');
 		assert.strictEqual(count, 3);
@@ -288,30 +292,39 @@ describe('Proxied client', function () {
 			assert.strictEqual(err?.message, 'self-signed certificate');
 		}
 	});
-	it('should use ca agent option 2', async function () {
-		try {
-			vpa.resetCaches(); // Allows loadAdditionalCertificates to run again.
-			const params = {
-				...proxiedProxyAgentParamsV1,
-				loadAdditionalCertificates: async () => [
-					...await vpa.loadSystemCertificates({ log: console }),
-				],
-			};
-			const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(params);
-			const patchedHttps: typeof https = {
-				...https,
-				...vpa.createHttpPatch(params, https, resolveProxy),
-			} as any;
-			await testRequest(patchedHttps, {
-				hostname: 'test-https-server',
-				path: '/test-path',
-				_vscodeTestReplaceCaCerts: true,
-				agent: new https.Agent({ ca }),
-			});
-		} finally {
-			vpa.resetCaches(); // Allows loadAdditionalCertificates to run again.
-		}
-	});
+	for (const loadSystemCertificatesFromNode of [
+		() => true,
+		() => false,
+		undefined as any as (() => boolean), // Test backward compatibility
+	]) {
+		it('should use ca agent option 2', async function () {
+			try {
+				vpa.resetCaches(); // Allows loadAdditionalCertificates to run again.
+				const params = {
+					...proxiedProxyAgentParamsV1,
+					loadAdditionalCertificates: async () => [
+						...await vpa.loadSystemCertificates({
+							loadSystemCertificatesFromNode,
+							log: console,
+						}),
+					],
+				};
+				const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(params);
+				const patchedHttps: typeof https = {
+					...https,
+					...vpa.createHttpPatch(params, https, resolveProxy),
+				} as any;
+				await testRequest(patchedHttps, {
+					hostname: 'test-https-server',
+					path: '/test-path',
+					_vscodeTestReplaceCaCerts: true,
+					agent: new https.Agent({ ca }),
+				});
+			} finally {
+				vpa.resetCaches(); // Allows loadAdditionalCertificates to run again.
+			}
+		});
+	}
 	it('should prefer ca agent option', async function () {
 		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
 		const patchedHttps: typeof https = {

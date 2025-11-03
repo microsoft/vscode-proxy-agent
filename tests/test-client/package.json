@@ -13,7 +13,7 @@
   "devDependencies": {
     "@types/kerberos": "^1.1.2",
     "@types/mocha": "5.2.5",
-    "@types/node": "^20.8.4",
+    "@types/node": "^22.18.10",
     "kerberos": "^2.0.1",
     "mocha": "10.8.2",
     "ts-node": "9.1.1",

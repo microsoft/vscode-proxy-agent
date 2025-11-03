@@ -21,12 +21,16 @@ export const directProxyAgentParams: vpa.ProxyAgentParams = {
     isAdditionalFetchSupportEnabled: () => true,
 	addCertificatesV1: () => false,
 	addCertificatesV2: () => true,
+	loadSystemCertificatesFromNode: () => undefined,
 	log: console,
 	getLogLevel: () => vpa.LogLevel.Trace,
 	proxyResolveTelemetry: () => undefined,
 	isUseHostProxyEnabled: () => true,
 	loadAdditionalCertificates: async () => [
-		...await loadSystemCertificates({ log: console }),
+		...await loadSystemCertificates({
+			loadSystemCertificatesFromNode: () => undefined,
+			log: console,
+		}),
 		...ca,
 	],
 	env: {},

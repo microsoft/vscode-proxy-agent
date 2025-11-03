@@ -230,30 +230,39 @@ describe('Direct client', function () {
 			assert.strictEqual(err?.message, 'self-signed certificate');
 		}
 	});
-	it('should use ca agent option 2', async function () {
-		try {
-			vpa.resetCaches(); // Allows loadAdditionalCertificates to run again.
-			const params = {
-				...directProxyAgentParamsV1,
-				loadAdditionalCertificates: async () => [
-					...await vpa.loadSystemCertificates({ log: console }),
-				],
-			};
-			const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(params);
-			const patchedHttps: typeof https = {
-				...https,
-				...vpa.createHttpPatch(params, https, resolveProxy),
-			} as any;
-			await testRequest(patchedHttps, {
-				hostname: 'test-https-server',
-				path: '/test-path',
-				_vscodeTestReplaceCaCerts: true,
-				agent: new https.Agent({ ca }),
-			});
-		} finally {
-			vpa.resetCaches(); // Allows loadAdditionalCertificates to run again.
-		}
-	});
+	for (const loadSystemCertificatesFromNode of [
+		() => true,
+		() => false,
+		undefined as any as (() => boolean), // Test backward compatibility
+	]) {
+		it('should use ca agent option 2', async function () {
+			try {
+				vpa.resetCaches(); // Allows loadAdditionalCertificates to run again.
+				const params = {
+					...directProxyAgentParamsV1,
+					loadAdditionalCertificates: async () => [
+						...await vpa.loadSystemCertificates({
+							loadSystemCertificatesFromNode,
+							log: console,
+						}),
+					],
+				};
+				const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(params);
+				const patchedHttps: typeof https = {
+					...https,
+					...vpa.createHttpPatch(params, https, resolveProxy),
+				} as any;
+				await testRequest(patchedHttps, {
+					hostname: 'test-https-server',
+					path: '/test-path',
+					_vscodeTestReplaceCaCerts: true,
+					agent: new https.Agent({ ca }),
+				});
+			} finally {
+				vpa.resetCaches(); // Allows loadAdditionalCertificates to run again.
+			}
+		});
+	}
 	it('should prefer ca agent option', async function () {
 		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParamsV1);
 		const patchedHttps: typeof https = {
