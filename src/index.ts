@@ -70,6 +70,7 @@ export interface ProxyAgentParams {
 	isAdditionalFetchSupportEnabled: () => boolean,
 	addCertificatesV1: () => boolean,
 	addCertificatesV2: () => boolean,
+	loadSystemCertificatesFromNode: () => boolean | undefined;
 	loadAdditionalCertificates(): Promise<string[]>;
 	lookupProxyAuthorization?: LookupProxyAuthorization;
 	log: Log;
@@ -522,17 +523,18 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 			if (!options.secureContext) {
 				options.secureContext = tls.createSecureContext(options);
 			}
-			if (!_certificates) {
+			const certificates = _certs.get(!!params.loadSystemCertificatesFromNode())?.result;
+			if (!certificates) {
 				params.log.trace('ProxyResolver#tls.connect waiting for existing socket connect');
 				options.socket.once('connect' , () => {
 					params.log.trace('ProxyResolver#tls.connect got existing socket connect - adding certs');
-					for (const cert of _certificates || []) {
+					for (const cert of _certs.get(!!params.loadSystemCertificatesFromNode())?.result || []) {
 						options!.secureContext!.context.addCACert(cert);
 					}
 				});
 			} else {
 				params.log.trace('ProxyResolver#tls.connect existing socket already connected - adding certs');
-				for (const cert of _certificates) {
+				for (const cert of certificates) {
 					options!.secureContext!.context.addCACert(cert);
 				}
 			}
@@ -877,28 +879,41 @@ function addCertificatesToOptionsV1(params: ProxyAgentParams, addCertificatesV1:
 	}
 }
 
-let _certificatesPromise: Promise<string[]> | undefined;
-let _certificates: string[] | undefined;
+const _certs = new Map<boolean, { promise: Promise<string[]>; result: string[] | undefined }>();
 export async function getOrLoadAdditionalCertificates(params: ProxyAgentParams) {
-	if (!_certificatesPromise) {
-		_certificatesPromise = (async () => {
-			return _certificates = await params.loadAdditionalCertificates();
-		})();
+	const loadFromNode = !!params.loadSystemCertificatesFromNode();
+	if (!_certs.has(loadFromNode)) {
+		const cert: { promise: Promise<string[]>; result: string[] | undefined } = {
+			promise: (async () => {
+				const result = await params.loadAdditionalCertificates();
+				return cert!.result = result; // need to await before accessing cert.
+			})(),
+			result: undefined
+		};
+		_certs.set(loadFromNode, cert);
 	}
-	return _certificatesPromise;
+	return _certs.get(loadFromNode)!.promise;
 }
 
 export interface CertificateParams {
+	loadSystemCertificatesFromNode: () => boolean | undefined;
 	log: Log;
 }
 
 let _systemCertificatesPromise: Promise<string[]> | undefined;
 export async function loadSystemCertificates(params: CertificateParams) {
+	if (!!params.loadSystemCertificatesFromNode?.()) { // Checking if function exists for backward compatibility.
+		const start = Date.now();
+		const systemCerts = tls.getCACertificates('system');
+		params.log.debug(`ProxyResolver#loadSystemCertificates from Node.js count (${Date.now() - start}ms)`, systemCerts.length);
+		return systemCerts;
+	}
 	if (!_systemCertificatesPromise) {
 		_systemCertificatesPromise = (async () => {
 			try {
+				const start = Date.now();
 				const certs = await readSystemCertificates();
-				params.log.debug('ProxyResolver#loadSystemCertificates count', certs.length);
+				params.log.debug(`ProxyResolver#loadSystemCertificates count (${Date.now() - start}ms)`, certs.length);
 				const now = Date.now();
 				const filtered = certs
 					.filter(cert => {
@@ -923,8 +938,7 @@ export async function loadSystemCertificates(params: CertificateParams) {
 }
 
 export function resetCaches() {
-	_certificatesPromise = undefined;
-	_certificates = undefined;
+	_certs.clear();
 	_systemCertificatesPromise = undefined;
 }
 

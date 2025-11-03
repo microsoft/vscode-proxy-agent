@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.36.0]
+- Support loading certificates with Node.js ([microsoft/vscode-proxy-agent#80](https://github.com/microsoft/vscode-proxy-agent/pull/80))
+
 ## [0.35.0]
 - Flush proxy cache when network interfaces changed ([microsoft/vscode-proxy-agent#79](https://github.com/microsoft/vscode-proxy-agent/pull/79))
 

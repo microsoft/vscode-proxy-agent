@@ -1,6 +1,6 @@
 {
   "name": "@vscode/proxy-agent",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "description": "NodeJS http(s) agent implementation for VS Code",
   "main": "out/index.js",
   "types": "out/index.d.ts",
@@ -27,6 +27,9 @@
     "url": "https://github.com/microsoft/vscode-proxy-agent/issues"
   },
   "homepage": "https://github.com/microsoft/vscode-proxy-agent",
+  "engines": {
+    "node": ">=22.15.0"
+  },
   "dependencies": {
     "@tootallnate/once": "^3.0.0",
     "agent-base": "^7.0.1",
@@ -38,7 +41,7 @@
   },
   "devDependencies": {
     "@types/debug": "^4.1.9",
-    "@types/node": "^20.8.4",
+    "@types/node": "^22.18.10",
     "typescript": "^5.2.2"
   },
   "scripts": {
