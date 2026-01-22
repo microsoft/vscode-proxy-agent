@@ -1,6 +1,6 @@
 {
   "name": "@vscode/proxy-agent",
-  "version": "0.36.0",
+  "version": "0.37.0",
   "description": "NodeJS http(s) agent implementation for VS Code",
   "main": "out/index.js",
   "types": "out/index.d.ts",
@@ -46,7 +46,8 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "test": "cd tests && docker compose run --rm test-direct-client && docker compose run --rm test-proxy-client; docker compose down"
   },
   "optionalDependencies": {
     "@vscode/windows-ca-certs": "^0.3.1"
