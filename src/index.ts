@@ -900,13 +900,30 @@ export interface CertificateParams {
 	log: Log;
 }
 
+function filterExpiredCertificates(params: CertificateParams, certs: string[]) {
+	const now = Date.now();
+	const filtered = certs
+		.filter(cert => {
+			try {
+				const parsedCert = new crypto.X509Certificate(cert);
+				const parsedDate = Date.parse(parsedCert.validTo);
+				return isNaN(parsedDate) || parsedDate > now;
+			} catch (err) {
+				params.log.debug('ProxyResolver#filterExpiredCertificates parse error', toErrorMessage(err));
+				return false;
+			}
+		});
+	params.log.debug('ProxyResolver#filterExpiredCertificates count filtered', filtered.length);
+	return filtered;
+}
+
 let _systemCertificatesPromise: Promise<string[]> | undefined;
 export async function loadSystemCertificates(params: CertificateParams) {
 	if (!!params.loadSystemCertificatesFromNode?.()) { // Checking if function exists for backward compatibility.
 		const start = Date.now();
 		const systemCerts = tls.getCACertificates('system');
 		params.log.debug(`ProxyResolver#loadSystemCertificates from Node.js count (${Date.now() - start}ms)`, systemCerts.length);
-		return systemCerts;
+		return filterExpiredCertificates(params, systemCerts);
 	}
 	if (!_systemCertificatesPromise) {
 		_systemCertificatesPromise = (async () => {
@@ -914,20 +931,7 @@ export async function loadSystemCertificates(params: CertificateParams) {
 				const start = Date.now();
 				const certs = await readSystemCertificates();
 				params.log.debug(`ProxyResolver#loadSystemCertificates count (${Date.now() - start}ms)`, certs.length);
-				const now = Date.now();
-				const filtered = certs
-					.filter(cert => {
-						try {
-							const parsedCert = new crypto.X509Certificate(cert);
-							const parsedDate = Date.parse(parsedCert.validTo);
-							return isNaN(parsedDate) || parsedDate > now;
-						} catch (err) {
-							params.log.debug('ProxyResolver#loadSystemCertificates parse error', toErrorMessage(err));
-							return false;
-						}
-					});
-				params.log.debug('ProxyResolver#loadSystemCertificates count filtered', filtered.length);
-				return filtered;
+				return filterExpiredCertificates(params, certs);
 			} catch (err) {
 				params.log.error('ProxyResolver#loadSystemCertificates error', toErrorMessage(err));
 				return [];

@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.37.0]
+- Filter expired certificates when loading from Node.js ([microsoft/vscode#284800](https://github.com/microsoft/vscode/issues/284800))
+
 ## [0.36.0]
 - Support loading certificates with Node.js ([microsoft/vscode-proxy-agent#80](https://github.com/microsoft/vscode-proxy-agent/pull/80))
 
