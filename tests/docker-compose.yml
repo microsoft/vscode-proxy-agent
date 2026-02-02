@@ -10,7 +10,7 @@ services:
         working_dir: /repo/tests/test-client
         environment:
             - MOCHA_TESTS=src/direct.test.ts src/tls.test.ts src/socket.test.ts
-        command: /bin/sh -c 'rm -rf /root/.npm && npm run test'
+        command: /bin/sh -c 'rm -rf /root/.npm && npm install && npm run test'
         depends_on:
             test-https-server:
                 condition: service_healthy
@@ -31,6 +31,7 @@ services:
             update-ca-certificates &&
             /usr/local/bin/configure-kerberos-client.sh &&
             rm -rf /root/.npm &&
+            npm install &&
             npm run test'
         depends_on:
             test-http-proxy:
@@ -95,8 +96,12 @@ services:
         volumes:
             - ./test-https-server:/etc/nginx
         networks:
-            - test-servers
-            - test-proxies-and-servers
+            test-servers:
+                aliases:
+                    - test-https-server-2
+            test-proxies-and-servers:
+                aliases:
+                    - test-https-server-2
         ports:
             - 443
 

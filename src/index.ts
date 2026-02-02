@@ -624,10 +624,9 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 			return originalFetch(input, modifiedInit);
 		}
 
-		const state: Record<string, any> = {};
 		const modifiedInit = {
 			...init,
-			dispatcher: await getProxyAgent(params, agentOptions.dispatcher, proxyURL, allowH2, requestCA, proxyCA, addCerts, state),
+			dispatcher: getProxyAgent(params, agentOptions.dispatcher, proxyURL, allowH2, requestCA, proxyCA, addCerts),
 		};
 		return originalFetch(input, modifiedInit);
 	};
@@ -663,9 +662,10 @@ function createAgent(allowH2: boolean | undefined, requestCA: string | Buffer | 
 }
 
 let previousAddCertsProxyAgent: boolean | undefined = undefined;
+let previousLookupProxyAuthorization: LookupProxyAuthorization | undefined = undefined;
 let defaultProxyAgent: undici.ProxyAgent | undefined = undefined;
 let proxyAgentCache = new WeakMap<undici.Dispatcher, Map<string, undici.ProxyAgent>>();
-async function getProxyAgent(
+function getProxyAgent(
 	params: ProxyAgentParams,
 	originalDispatcher: undici.Dispatcher | undefined,
 	proxyURL: string,
@@ -673,17 +673,18 @@ async function getProxyAgent(
 	requestCA: string | Buffer | (string | Buffer)[] | undefined,
 	proxyCA: string | Buffer | (string | Buffer)[] | undefined,
 	currentAddCerts: boolean,
-	state: Record<string, any>
-): Promise<undici.ProxyAgent> {
-	if (previousAddCertsProxyAgent !== currentAddCerts) {
+): undici.ProxyAgent {
+	const shouldClearCache = previousAddCertsProxyAgent !== currentAddCerts || previousLookupProxyAuthorization !== params.lookupProxyAuthorization;
+	if (shouldClearCache) {
 		previousAddCertsProxyAgent = currentAddCerts;
+		previousLookupProxyAuthorization = params.lookupProxyAuthorization;
 		defaultProxyAgent = undefined;
 		proxyAgentCache = new WeakMap<undici.Dispatcher, Map<string, undici.ProxyAgent>>();
 	}
 
 	if (!originalDispatcher) {
 		if (!defaultProxyAgent) {
-			defaultProxyAgent = await createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA, state);
+			defaultProxyAgent = createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA);
 		}
 		return defaultProxyAgent;
 	}
@@ -695,29 +696,26 @@ async function getProxyAgent(
 	}
 
 	if (!dispatcherCache.has(proxyURL)) {
-		dispatcherCache.set(proxyURL, await createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA, state));
+		dispatcherCache.set(proxyURL, createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA));
 	}
 	return dispatcherCache.get(proxyURL)!;
 }
 
-async function createProxyAgent(
+function createProxyAgent(
 	params: ProxyAgentParams,
 	proxyURL: string,
 	allowH2: boolean | undefined,
 	requestCA: string | Buffer | (string | Buffer)[] | undefined,
 	proxyCA: string | Buffer | (string | Buffer)[] | undefined,
-	state: Record<string, any>
-): Promise<undici.ProxyAgent> {
-	const proxyAuthorization = await params.lookupProxyAuthorization?.(proxyURL, undefined, state);
+): undici.ProxyAgent {
 	return new undici.ProxyAgent({
 		uri: proxyURL,
 		allowH2,
-		headers: proxyAuthorization ? { 'Proxy-Authorization': proxyAuthorization } : undefined,
 		requestTls: requestCA ? { allowH2, ca: requestCA } : { allowH2 },
 		proxyTls: proxyCA ? { allowH2, ca: proxyCA } : { allowH2 },
 		clientFactory: (origin: URL, opts: object): undici.Dispatcher => (new undici.Pool(origin, opts) as any).compose((dispatch: undici.Dispatcher['dispatch']) => {
 			class ProxyAuthHandler extends undici.DecoratorHandler {
-				constructor(private dispatch: undici.Dispatcher['dispatch'], private options: undici.Dispatcher.DispatchOptions, private handler: undici.Dispatcher.DispatchHandler) {
+				constructor(private dispatch: undici.Dispatcher['dispatch'], private options: undici.Dispatcher.DispatchOptions, private handler: undici.Dispatcher.DispatchHandler, private state: Record<string, any>) {
 					super(handler);
 				}
 				onResponseError(controller: undici.Dispatcher.DispatchController, err: Error): void {
@@ -726,29 +724,9 @@ async function createProxyAgent(
 					}
 					(async () => {
 						try {
-							const proxyAuthorization = await params.lookupProxyAuthorization?.(proxyURL!, err.proxyAuthenticate, state);
+							const proxyAuthorization = await params.lookupProxyAuthorization?.(proxyURL!, err.proxyAuthenticate, this.state);
 							if (proxyAuthorization) {
-								if (!this.options.headers) {
-									this.options.headers = ['Proxy-Authorization', proxyAuthorization];
-								} else if (Array.isArray(this.options.headers)) {
-									const i = this.options.headers.findIndex((value, index) => index % 2 === 0 && value.toLowerCase() === 'proxy-authorization');
-									if (i === -1) {
-										this.options.headers.push('Proxy-Authorization', proxyAuthorization);
-									} else {
-										this.options.headers[i + 1] = proxyAuthorization;
-									}
-								} else if (typeof (this.options.headers as any)[Symbol.iterator] === 'function') {
-									const headers = [...(this.options.headers as Iterable<[string, string | string[] | undefined]>)];
-									const i = headers.findIndex(value => value[0].toLowerCase() === 'proxy-authorization');
-									if (i === -1) {
-										headers.push(['Proxy-Authorization', proxyAuthorization]);
-									} else {
-										headers[i][1] = proxyAuthorization;
-									}
-									this.options.headers = headers;
-								} else {
-									(this.options.headers as Record<string, string | string[] | undefined>)['Proxy-Authorization'] = proxyAuthorization;
-								}
+								setProxyAuthorizationHeader(this.options, proxyAuthorization);
 								this.dispatch(this.options, this);
 							} else {
 								this.handler.onResponseError?.(controller, new undici.errors.RequestAbortedError(`Proxy response (407) ?.== 200 when HTTP Tunneling`)); // Mimick undici's behavior
@@ -776,10 +754,60 @@ async function createProxyAgent(
 				}
 			}
 			return function proxyAuthDispatch(options: undici.Dispatcher.DispatchOptions, handler: undici.Dispatcher.DispatchHandler) {
-				return dispatch(options, new ProxyAuthHandler(dispatch, options, handler));
+				const state: Record<string, any> = {};
+				(async () => {
+					try {
+						const proxyAuthorization = await params.lookupProxyAuthorization?.(proxyURL, undefined, state);
+						if (proxyAuthorization) {
+							setProxyAuthorizationHeader(options, proxyAuthorization);
+						}
+					} catch (err) {
+						// 407 handler will retry with auth.
+						params.log.error('ProxyResolver#proxyAuthDispatch lookupProxyAuthorization failed', toErrorMessage(err));
+					}
+					dispatch(options, new ProxyAuthHandler(dispatch, options, handler, state));
+				})();
 			};
 		}),
 	});
+}
+
+/** @internal Exported for testing */
+export function setProxyAuthorizationHeader(options: undici.Dispatcher.DispatchOptions, proxyAuthorization: string): void {
+	const headers = options.headers;
+	if (!headers) {
+		options.headers = ['Proxy-Authorization', proxyAuthorization];
+	} else if (Array.isArray(headers) && (headers.length === 0 || Array.isArray(headers[0]))) {
+		// Tuple array format: [['Header1', 'value1'], ['Header2', 'value2'], ...]
+		const tuplesArray = headers as unknown as [string, string | string[] | undefined][];
+		const i = tuplesArray.findIndex(([key]) => key.toLowerCase() === 'proxy-authorization');
+		if (i === -1) {
+			tuplesArray.push(['Proxy-Authorization', proxyAuthorization]);
+		} else {
+			tuplesArray[i][1] = proxyAuthorization;
+		}
+	} else if (Array.isArray(headers)) {
+		// Flat array format: ['Header1', 'value1', 'Header2', 'value2', ...]
+		const i = headers.findIndex((value, index) => index % 2 === 0 && typeof value === 'string' && value.toLowerCase() === 'proxy-authorization');
+		if (i === -1) {
+			headers.push('Proxy-Authorization', proxyAuthorization);
+		} else {
+			headers[i + 1] = proxyAuthorization;
+		}
+	} else if (Symbol.iterator in headers) {
+		// Iterable of tuples format (e.g., Map): [['Header1', 'value1'], ['Header2', 'value2'], ...]
+		const headersArray = [...headers as Iterable<[string, string | string[] | undefined]>];
+		const i = headersArray.findIndex(([key]) => key.toLowerCase() === 'proxy-authorization');
+		if (i === -1) {
+			headersArray.push(['Proxy-Authorization', proxyAuthorization]);
+		} else {
+			headersArray[i][1] = proxyAuthorization;
+		}
+		options.headers = headersArray;
+	} else {
+		// Record format: { 'Header1': 'value1', 'Header2': 'value2', ... }
+		headers['Proxy-Authorization'] = proxyAuthorization;
+	}
 }
 
 class ProxyAuthError extends Error {

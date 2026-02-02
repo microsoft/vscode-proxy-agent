@@ -41,13 +41,17 @@
   },
   "devDependencies": {
     "@types/debug": "^4.1.9",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^22.18.10",
+    "mocha": "^11.7.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.2.2"
   },
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "cd tests && docker compose run --rm test-direct-client && docker compose run --rm test-proxy-client; docker compose down"
+    "test:unit": "mocha --exit -r ts-node/register tests/src/**/*.test.ts",
+    "test": "npm run test:unit && cd tests && docker compose run --rm test-direct-client && docker compose run --rm test-proxy-client; e=$?; docker compose down; exit $e"
   },
   "optionalDependencies": {
     "@vscode/windows-ca-certs": "^0.3.1"
