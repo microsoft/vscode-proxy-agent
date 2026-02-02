@@ -160,6 +160,29 @@ describe('Proxied client', function () {
 		assert.strictEqual((await res.json()).status, 'OK!');
 	});
 
+	it('should call auth callback before each request (fetch)', async function () {
+		let callCount = 0;
+		const params: vpa.ProxyAgentParams = {
+			...directProxyAgentParamsV1,
+			resolveProxy: async () => 'PROXY test-http-auth-proxy:3128',
+			async lookupProxyAuthorization(proxyURL, proxyAuthenticate) {
+				if (!proxyAuthenticate) {
+					callCount++; // Count initial lookups (not 407 retries)
+				}
+				return `Basic ${Buffer.from('foo:bar').toString('base64')}`;
+			},
+		};
+		const { resolveProxyURL } = vpa.createProxyResolver(params);
+		const patchedFetch = vpa.createFetchPatch(params, globalThis.fetch, resolveProxyURL);
+		
+		// Make requests to two different servers to create separate tunnels
+		// Each tunnel requires a new CONNECT request, triggering lookupProxyAuthorization
+		await patchedFetch('https://test-https-server/test-path');
+		await patchedFetch('https://test-https-server-2/test-path');
+		
+		assert.strictEqual(callCount, 2, 'lookupProxyAuthorization should be called once per tunnel');
+	});
+
 	it('should pass state around', async function () {
 		let count = 0;
 		await testRequest(https, {
