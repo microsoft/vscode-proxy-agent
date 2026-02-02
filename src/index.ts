@@ -663,7 +663,7 @@ function createAgent(allowH2: boolean | undefined, requestCA: string | Buffer | 
 
 let previousAddCertsProxyAgent: boolean | undefined = undefined;
 let previousLookupProxyAuthorization: LookupProxyAuthorization | undefined = undefined;
-let defaultProxyAgent: undici.ProxyAgent | undefined = undefined;
+let defaultProxyAgents = new Map<string, undici.ProxyAgent>();
 let proxyAgentCache = new WeakMap<undici.Dispatcher, Map<string, undici.ProxyAgent>>();
 function getProxyAgent(
 	params: ProxyAgentParams,
@@ -678,15 +678,15 @@ function getProxyAgent(
 	if (shouldClearCache) {
 		previousAddCertsProxyAgent = currentAddCerts;
 		previousLookupProxyAuthorization = params.lookupProxyAuthorization;
-		defaultProxyAgent = undefined;
+		defaultProxyAgents = new Map<string, undici.ProxyAgent>();
 		proxyAgentCache = new WeakMap<undici.Dispatcher, Map<string, undici.ProxyAgent>>();
 	}
 
 	if (!originalDispatcher) {
-		if (!defaultProxyAgent) {
-			defaultProxyAgent = createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA);
+		if (!defaultProxyAgents.has(proxyURL)) {
+			defaultProxyAgents.set(proxyURL, createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA));
 		}
-		return defaultProxyAgent;
+		return defaultProxyAgents.get(proxyURL)!;
 	}
 
 	let dispatcherCache = proxyAgentCache.get(originalDispatcher);

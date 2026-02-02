@@ -389,6 +389,41 @@ describe('Proxied client', function () {
 		assert.strictEqual(res.status, 200);
 		assert.strictEqual((await res.json()).status, 'OK HTTP2!');
 	});
+
+	it('should cache separate agents per proxy URL (fetch)', async function () {
+		vpa.resetCaches();
+		try {
+			// Provide a custom resolveProxyURL that returns different proxies based on the URL.
+			// This bypasses the proxy resolver's cache (which caches by scheme://host:port)
+			// and directly exercises the proxy agent cache (defaultProxyAgents map).
+			const resolveProxyURL = async (url: string) => {
+				// First request goes to auth-proxy without credentials (will fail with 407)
+				// Second request goes to regular proxy (should succeed)
+				if (url.includes('use-auth-proxy')) {
+					return 'http://test-http-auth-proxy:3128'; // No credentials - will fail
+				}
+				return 'http://test-http-proxy:3128'; // Regular proxy - should succeed
+			};
+			const patchedFetch = vpa.createFetchPatch(directProxyAgentParamsV1, globalThis.fetch, resolveProxyURL);
+
+			// Request 1: through auth-proxy without auth - should fail with 407
+			try {
+				await patchedFetch('https://test-https-server/test-path?use-auth-proxy');
+				assert.fail('Should have failed with 407');
+			} catch (err: any) {
+				assert.strictEqual(err?.cause?.cause?.message, 'Proxy response (407) ?.== 200 when HTTP Tunneling');
+			}
+
+			// Request 2: through regular proxy - should succeed
+			// Without the fix (single defaultProxyAgent), this would reuse the auth-proxy agent and fail.
+			// With the fix (Map per proxyURL), this creates a new agent for the regular proxy.
+			const res = await patchedFetch('https://test-https-server/test-path');
+			assert.strictEqual(res.status, 200);
+			assert.strictEqual((await res.json()).status, 'OK!');
+		} finally {
+			vpa.resetCaches();
+		}
+	});
 });
 
 // From microsoft/vscode's proxyResolver.ts:
