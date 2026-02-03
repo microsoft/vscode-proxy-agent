@@ -62,7 +62,11 @@ describe('Proxied client', function () {
 			await testRequest(https, {
 				hostname: 'test-https-server',
 				path: '/test-path',
-				agent: createPacProxyAgent(async () => 'PROXY test-http-auth-proxy:3128'),
+				agent: createPacProxyAgent(async () => 'PROXY test-http-auth-proxy:3128', {
+					async lookupProxyAuthorization(proxyURL, proxyAuthenticate) {
+						return undefined; // No credentials provided
+					},
+				}),
 				ca,
 			});
 		} catch (err) {

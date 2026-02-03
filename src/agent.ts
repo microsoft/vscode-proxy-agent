@@ -236,7 +236,13 @@ class HttpsProxyAgent2<Uri extends string> extends HttpsProxyAgent<Uri> {
 				req.emit('error', err);
 			}
 		}
-		req.once('socket', s => tmpReq.emit('socket', s));
+		req.once('socket', s => {
+			// Delay forwarding to give HTTP machinery time to fully attach listeners
+			// (workaround for https-proxy-agent synchronous data push race condition)
+			setImmediate(() => {
+				tmpReq.emit('socket', s);
+			});
+		});
 		return s;
 	}
 }
