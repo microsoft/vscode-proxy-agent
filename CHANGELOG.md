@@ -1,6 +1,10 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.38.0]
+- ProxyAgent per proxyURL and lookupProxyAuthorization per connection ([microsoft/vscode-proxy-agent#84](https://github.com/microsoft/vscode-proxy-agent/pull/84))
+- Add GitHub CI workflow
+
 ## [0.37.0]
 - Filter expired certificates when loading from Node.js ([microsoft/vscode#284800](https://github.com/microsoft/vscode/issues/284800))
 
