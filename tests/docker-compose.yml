@@ -14,6 +14,8 @@ services:
         depends_on:
             test-https-server:
                 condition: service_healthy
+            test-wss-server:
+                condition: service_healthy
     test-proxy-client:
         image: test-proxy-client:latest
         build: test-proxy-client
@@ -24,7 +26,7 @@ services:
             - test-proxies
         working_dir: /repo/tests/test-client
         environment:
-            - MOCHA_TESTS=src/proxy.test.ts
+            - MOCHA_TESTS=src/proxy.test.ts src/websocket.test.ts
         command: /bin/sh -c '
             while [ ! -f /root/.mitmproxy/mitmproxy-ca-cert.pem ]; do sleep 1; done &&
             cp /root/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy.crt &&
@@ -42,6 +44,8 @@ services:
                 condition: service_started
             test-https-proxy:
                 condition: service_started
+            test-wss-server:
+                condition: service_healthy
     test-http-proxy:
         image: ubuntu/squid:latest
         networks:
@@ -102,6 +106,16 @@ services:
             test-proxies-and-servers:
                 aliases:
                     - test-https-server-2
+        ports:
+            - 443
+    test-wss-server:
+        image: test-wss-server:latest
+        build: test-wss-server
+        volumes:
+            - ./test-wss-server:/app/certs
+        networks:
+            - test-servers
+            - test-proxies-and-servers
         ports:
             - 443
 

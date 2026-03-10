@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.39.0]
+- Add WebSocket proxy support via `createWebSocketPatch` ([microsoft/vscode-proxy-agent#89](https://github.com/microsoft/vscode-proxy-agent/pull/89))
+
 ## [0.38.0]
 - ProxyAgent per proxyURL and lookupProxyAuthorization per connection ([microsoft/vscode-proxy-agent#84](https://github.com/microsoft/vscode-proxy-agent/pull/84))
 - Add GitHub CI workflow
