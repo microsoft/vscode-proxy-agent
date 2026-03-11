@@ -1,3 +1,4 @@
+import * as http from 'http';
 import * as https from 'https';
 import * as undici from 'undici';
 import * as assert from 'assert';
@@ -58,8 +59,9 @@ describe('Proxied client', function () {
 	});
 
 	it('should fail with 407 when auth is missing', async function () {
-		try {
-			await testRequest(https, {
+		// Use the https module directly because https-proxy-agent doesn't always trigger 'end' on the body.
+		const res = await new Promise<http.IncomingMessage>((resolve, reject) => {
+			const req = https.request({
 				hostname: 'test-https-server',
 				path: '/test-path',
 				agent: createPacProxyAgent(async () => 'PROXY test-http-auth-proxy:3128', {
@@ -68,12 +70,11 @@ describe('Proxied client', function () {
 					},
 				}),
 				ca,
-			});
-		} catch (err) {
-			assert.strictEqual((err as any).statusCode, 407);
-			return;
-		}
-		assert.fail('Should have failed');
+			}, resolve);
+			req.on('error', reject);
+			req.end();
+		});
+		assert.strictEqual(res.statusCode, 407);
 	});
 
 	it('should fail with 407 when auth is missing (fetch)', async function () {

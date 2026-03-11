@@ -794,7 +794,7 @@ export function createWebSocketPatch(params: ProxyAgentParams, originalWebSocket
 			return new originalWebSocket(url, protocols as any);
 		}
 
-		const proxyDispatcher = new ProxyDispatcher(params, resolveProxyURL, init.dispatcher);
+		const proxyDispatcher = new ProxyDispatcher(params, resolveProxyURL, doResolveProxy, addCerts, init.dispatcher);
 		init.dispatcher = proxyDispatcher;
 		const ws = new originalWebSocket(url, init as any);
 		Object.defineProperty(ws, 'responseHeaders', {
@@ -822,6 +822,8 @@ class ProxyDispatcher extends undici.Dispatcher {
 	constructor(
 		private params: ProxyAgentParams,
 		private resolveProxyURL: (url: string) => Promise<string | undefined>,
+		private doResolveProxy: boolean,
+		private addCerts: boolean,
 		private originalDispatcher: undici.Dispatcher | undefined,
 	) {
 		super();
@@ -854,22 +856,21 @@ class ProxyDispatcher extends undici.Dispatcher {
 		const url = opts.origin?.toString();
 		(async () => {
 			try {
-				const addCerts = this.params.addCertificatesV1() || this.params.addCertificatesV2();
 				// Map ws:/wss: to http:/https: for proxy resolution
 				let resolveURL = url;
 				if (resolveURL) {
 					resolveURL = resolveURL.replace(/^ws(s?):/, 'http$1:');
 				}
-				const proxyURL = resolveURL ? await this.resolveProxyURL(resolveURL) : undefined;
-				const systemCA = addCerts ? [...tls.rootCertificates, ...await getOrLoadAdditionalCertificates(this.params)] : undefined;
+				const proxyURL = this.doResolveProxy && resolveURL ? await this.resolveProxyURL(resolveURL) : undefined;
+				const systemCA = this.addCerts ? [...tls.rootCertificates, ...await getOrLoadAdditionalCertificates(this.params)] : undefined;
 				const callerOptions = getAgentOptions({ dispatcher: this.originalDispatcher } as any);
 				const requestCA = callerOptions.requestCA || systemCA;
 				const proxyCA = callerOptions.proxyCA || systemCA;
 				let dispatcher: undici.Dispatcher;
 				if (proxyURL) {
-					dispatcher = getProxyAgent(this.params, this.originalDispatcher, proxyURL, callerOptions.allowH2, requestCA, proxyCA, addCerts);
-				} else if (addCerts) {
-					dispatcher = getAgent(this.originalDispatcher, callerOptions.allowH2, requestCA, addCerts)!;
+					dispatcher = getProxyAgent(this.params, this.originalDispatcher, proxyURL, callerOptions.allowH2, requestCA, proxyCA, this.addCerts);
+				} else if (this.addCerts) {
+					dispatcher = getAgent(this.originalDispatcher, callerOptions.allowH2, requestCA, this.addCerts)!;
 				} else if (this.originalDispatcher) {
 					dispatcher = this.originalDispatcher;
 				} else {
