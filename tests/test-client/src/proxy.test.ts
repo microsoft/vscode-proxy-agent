@@ -1,3 +1,4 @@
+import * as http from 'http';
 import * as https from 'https';
 import * as undici from 'undici';
 import * as assert from 'assert';
@@ -57,7 +58,7 @@ describe('Proxied client', function () {
 		assert.strictEqual((await res.json()).status, 'OK!');
 	});
 
-	it('should fail with 407 when auth is missing', async function () {
+	it('should fail with 407 when auth is missing 1', async function () {
 		try {
 			await testRequest(https, {
 				hostname: 'test-https-server',
@@ -74,6 +75,24 @@ describe('Proxied client', function () {
 			return;
 		}
 		assert.fail('Should have failed');
+	});
+
+	it('should fail with 407 when auth is missing 2', async function () {
+		const res = await new Promise<http.IncomingMessage>((resolve, reject) => {
+			const req = https.request({
+				hostname: 'test-https-server',
+				path: '/test-path',
+				agent: createPacProxyAgent(async () => 'PROXY test-http-auth-proxy:3128', {
+					async lookupProxyAuthorization(proxyURL, proxyAuthenticate) {
+						return undefined; // No credentials provided
+					},
+				}),
+				ca,
+			}, resolve);
+			req.on('error', reject);
+			req.end();
+		});
+		assert.strictEqual(res.statusCode, 407);
 	});
 
 	it('should fail with 407 when auth is missing (fetch)', async function () {

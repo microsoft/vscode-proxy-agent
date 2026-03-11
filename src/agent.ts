@@ -236,12 +236,19 @@ class HttpsProxyAgent2<Uri extends string> extends HttpsProxyAgent<Uri> {
 				req.emit('error', err);
 			}
 		}
+		const isFailedConnect = connect && connect.statusCode !== 200;
 		req.once('socket', s => {
-			// Delay forwarding to give HTTP machinery time to fully attach listeners
-			// (workaround for https-proxy-agent synchronous data push race condition)
-			setImmediate(() => {
+			if (isFailedConnect) {
+				// For failed CONNECT responses, forward immediately so the fake socket
+				// can push the buffered response body before the HTTP parser times out.
 				tmpReq.emit('socket', s);
-			});
+			} else {
+				// Delay forwarding to give HTTP machinery time to fully attach listeners
+				// (workaround for https-proxy-agent synchronous data push race condition)
+				setImmediate(() => {
+					tmpReq.emit('socket', s);
+				});
+			}
 		});
 		return s;
 	}
