@@ -68,6 +68,7 @@ export interface ProxyAgentParams {
 	getProxySupport: () => ProxySupportSetting,
 	getNoProxyConfig?: () => string[],
 	isAdditionalFetchSupportEnabled: () => boolean,
+	isWebSocketPatchEnabled: () => boolean,
 	addCertificatesV1: () => boolean,
 	addCertificatesV2: () => boolean,
 	loadSystemCertificatesFromNode: () => boolean | undefined;
@@ -770,6 +771,129 @@ function createProxyAgent(
 			};
 		}),
 	});
+}
+
+export function createWebSocketPatch(params: ProxyAgentParams, originalWebSocket: typeof globalThis.WebSocket, resolveProxyURL: (url: string) => Promise<string | undefined>) {
+	const PatchedWebSocket = function WebSocket(url: string | URL, protocols?: string | string[] | { protocols?: string | string[]; dispatcher?: undici.Dispatcher; headers?: HeadersInit }) {
+		if (!params.isWebSocketPatchEnabled()) {
+			return new originalWebSocket(url, protocols as any);
+		}
+		const proxySupport = params.getProxySupport();
+		const addCerts = params.addCertificatesV1() || params.addCertificatesV2();
+		let init: { protocols?: string | string[]; dispatcher?: undici.Dispatcher; headers?: HeadersInit };
+		if (protocols === undefined || protocols === null) {
+			init = {};
+		} else if (typeof protocols === 'string' || Array.isArray(protocols)) {
+			init = { protocols };
+		} else {
+			init = { ...protocols };
+		}
+		const hasCallerDispatcher = init.dispatcher !== undefined;
+		const doResolveProxy = proxySupport === 'override' || proxySupport === 'fallback' || (proxySupport === 'on' && !hasCallerDispatcher);
+		if (!doResolveProxy && !addCerts) {
+			return new originalWebSocket(url, protocols as any);
+		}
+
+		const proxyDispatcher = new ProxyDispatcher(params, resolveProxyURL, init.dispatcher);
+		init.dispatcher = proxyDispatcher;
+		const ws = new originalWebSocket(url, init as any);
+		Object.defineProperty(ws, 'responseHeaders', {
+			get() { return proxyDispatcher.responseHeaders; },
+			enumerable: true,
+			configurable: true,
+		});
+		return ws;
+	} as unknown as typeof globalThis.WebSocket;
+
+	PatchedWebSocket.prototype = originalWebSocket.prototype;
+	Object.defineProperties(PatchedWebSocket, {
+		CONNECTING: { value: originalWebSocket.CONNECTING, enumerable: true },
+		OPEN: { value: originalWebSocket.OPEN, enumerable: true },
+		CLOSING: { value: originalWebSocket.CLOSING, enumerable: true },
+		CLOSED: { value: originalWebSocket.CLOSED, enumerable: true },
+	});
+
+	return PatchedWebSocket;
+}
+
+class ProxyDispatcher extends undici.Dispatcher {
+	responseHeaders?: Record<string, string | string[] | undefined>;
+
+	constructor(
+		private params: ProxyAgentParams,
+		private resolveProxyURL: (url: string) => Promise<string | undefined>,
+		private originalDispatcher: undici.Dispatcher | undefined,
+	) {
+		super();
+	}
+
+	dispatch(opts: undici.Dispatcher.DispatchOptions, handler: undici.Dispatcher.DispatchHandler): boolean {
+		const self = this;
+		const wrappedHandler: undici.Dispatcher.DispatchHandler = {
+			...handler,
+			onUpgrade(statusCode: number, rawHeaders: Buffer[] | string[] | null, socket: stream.Duplex): void {
+				if (rawHeaders) {
+					const headers: Record<string, string | string[] | undefined> = {};
+					for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
+						const key = rawHeaders[i].toString().toLowerCase();
+						const value = rawHeaders[i + 1].toString();
+						const existing = headers[key];
+						if (existing === undefined) {
+							headers[key] = value;
+						} else if (Array.isArray(existing)) {
+							existing.push(value);
+						} else {
+							headers[key] = [existing, value];
+						}
+					}
+					self.responseHeaders = headers;
+				}
+				return handler.onUpgrade?.(statusCode, rawHeaders, socket);
+			},
+		};
+		const url = opts.origin?.toString();
+		(async () => {
+			try {
+				const addCerts = this.params.addCertificatesV1() || this.params.addCertificatesV2();
+				// Map ws:/wss: to http:/https: for proxy resolution
+				let resolveURL = url;
+				if (resolveURL) {
+					resolveURL = resolveURL.replace(/^ws(s?):/, 'http$1:');
+				}
+				const proxyURL = resolveURL ? await this.resolveProxyURL(resolveURL) : undefined;
+				const systemCA = addCerts ? [...tls.rootCertificates, ...await getOrLoadAdditionalCertificates(this.params)] : undefined;
+				const callerOptions = getAgentOptions({ dispatcher: this.originalDispatcher } as any);
+				const requestCA = callerOptions.requestCA || systemCA;
+				const proxyCA = callerOptions.proxyCA || systemCA;
+				let dispatcher: undici.Dispatcher;
+				if (proxyURL) {
+					dispatcher = getProxyAgent(this.params, this.originalDispatcher, proxyURL, callerOptions.allowH2, requestCA, proxyCA, addCerts);
+				} else if (addCerts) {
+					dispatcher = getAgent(this.originalDispatcher, callerOptions.allowH2, requestCA, addCerts)!;
+				} else if (this.originalDispatcher) {
+					dispatcher = this.originalDispatcher;
+				} else {
+					dispatcher = undici.getGlobalDispatcher();
+				}
+				dispatcher.dispatch(opts, wrappedHandler);
+			} catch (err: any) {
+				if (typeof (handler as any).onResponseError === 'function') {
+					(handler as any).onResponseError(null, err);
+				} else if (typeof (handler as any).onError === 'function') {
+					(handler as any).onError(err);
+				}
+			}
+		})();
+		return true;
+	}
+
+	close(): Promise<void> {
+		return Promise.resolve();
+	}
+
+	destroy(): Promise<void> {
+		return Promise.resolve();
+	}
 }
 
 /** @internal Exported for testing */

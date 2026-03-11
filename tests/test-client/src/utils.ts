@@ -10,6 +10,7 @@ import { loadSystemCertificates } from '../../../src';
 export const ca = [
 	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_cert.pem')).toString(),
 	fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_teapot_cert.pem')).toString(),
+	fs.readFileSync(path.join(__dirname, '../../test-wss-server/ssl_cert.pem')).toString(),
 ];
 
 export const unusedCa = fs.readFileSync(path.join(__dirname, '../../test-https-server/ssl_unused_cert.pem')).toString();
@@ -19,6 +20,7 @@ export const directProxyAgentParams: vpa.ProxyAgentParams = {
 	getProxyURL: () => undefined,
 	getProxySupport: () => 'override',
     isAdditionalFetchSupportEnabled: () => true,
+	isWebSocketPatchEnabled: () => true,
 	addCertificatesV1: () => false,
 	addCertificatesV2: () => true,
 	loadSystemCertificatesFromNode: () => undefined,
