@@ -1,6 +1,10 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.39.1]
+- Fix WebSocket `ProxyDispatcher` to respect `doResolveProxy` and `addCerts` flags from `createWebSocketPatch` ([microsoft/vscode-proxy-agent#90](https://github.com/microsoft/vscode-proxy-agent/pull/90))
+- Fix intermittent 407 test by checking `res.statusCode` directly
+
 ## [0.39.0]
 - Add WebSocket proxy support via `createWebSocketPatch` ([microsoft/vscode-proxy-agent#89](https://github.com/microsoft/vscode-proxy-agent/pull/89))
 
