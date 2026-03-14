@@ -92,7 +92,13 @@ export class PacProxyAgent extends Agent {
 			// Needed for SNI.
 			const originalAgent = this.opts.originalAgent;
 			const defaultAgent = secureEndpoint ? https.globalAgent : http.globalAgent;
-			agent = originalAgent === false ? new (defaultAgent as any).constructor() : (originalAgent || defaultAgent)
+			if (originalAgent === false) {
+				agent = new (defaultAgent as any).constructor();
+			} else if (originalAgent instanceof http.Agent) {
+				agent = originalAgent;
+			} else {
+				agent = defaultAgent;
+			}
 		} else if (proxyURL.startsWith('socks')) {
 			// Use a SOCKSv5h or SOCKSv4a proxy
 			agent = new SocksProxyAgent(proxyURL);
