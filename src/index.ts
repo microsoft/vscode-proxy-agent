@@ -717,12 +717,16 @@ function createProxyAgent(
 		clientFactory: (origin: URL, opts: object): undici.Dispatcher => (new undici.Pool(origin, opts) as any).compose((dispatch: undici.Dispatcher['dispatch']) => {
 			class ProxyAuthHandler extends undici.DecoratorHandler {
 				private connectResponseHeaders?: IncomingHttpHeaders;
+				private connectResponseStatusCode?: number;
 				constructor(private dispatch: undici.Dispatcher['dispatch'], private options: undici.Dispatcher.DispatchOptions, private handler: undici.Dispatcher.DispatchHandler, private state: Record<string, any>) {
 					super(handler);
 				}
 				private forwardResponseError(controller: undici.Dispatcher.DispatchController, err: Error): void {
 					if (this.connectResponseHeaders) {
 						(err as any).connectResponseHeaders = this.connectResponseHeaders;
+					}
+					if (this.connectResponseStatusCode !== undefined) {
+						(err as any).connectResponseStatusCode = this.connectResponseStatusCode;
 					}
 					this.handler.onResponseError?.(controller, err);
 				}
@@ -746,6 +750,7 @@ function createProxyAgent(
 				}
 				onRequestUpgrade?(controller: undici.Dispatcher.DispatchController, statusCode: number, headers: IncomingHttpHeaders, socket: stream.Duplex): void {
 					this.connectResponseHeaders = headers;
+					this.connectResponseStatusCode = statusCode;
 					if (statusCode === 407 && headers) {
 						let proxyAuthenticate: string | string[] | undefined;
 						for (const header in headers) {
@@ -810,6 +815,16 @@ export function createWebSocketPatch(params: ProxyAgentParams, originalWebSocket
 			enumerable: true,
 			configurable: true,
 		});
+		Object.defineProperty(ws, 'responseStatusCode', {
+			get() { return proxyDispatcher.responseStatusCode; },
+			enumerable: true,
+			configurable: true,
+		});
+		Object.defineProperty(ws, 'responseStatusText', {
+			get() { return proxyDispatcher.responseStatusText; },
+			enumerable: true,
+			configurable: true,
+		});
 		return ws;
 	} as unknown as typeof globalThis.WebSocket;
 
@@ -826,6 +841,8 @@ export function createWebSocketPatch(params: ProxyAgentParams, originalWebSocket
 
 class ProxyDispatcher extends undici.Dispatcher {
 	responseHeaders?: Record<string, string | string[] | undefined>;
+	responseStatusCode?: number;
+	responseStatusText?: string;
 
 	constructor(
 		private params: ProxyAgentParams,
@@ -843,6 +860,8 @@ class ProxyDispatcher extends undici.Dispatcher {
 			...handler,
 			// Deprecated API used by undici's internal WebSocket/fetch flow.
 			onHeaders(statusCode: number, rawHeaders: Buffer[], resume: () => void, statusText: string): boolean {
+				self.responseStatusCode = statusCode;
+				self.responseStatusText = statusText;
 				self.responseHeaders = parseRawHeaders(rawHeaders);
 				return handler.onHeaders?.(statusCode, rawHeaders, resume, statusText) ?? true;
 			},
@@ -851,9 +870,13 @@ class ProxyDispatcher extends undici.Dispatcher {
 				if (connectHeaders) {
 					self.responseHeaders = convertHeaders(connectHeaders);
 				}
+				if ((err as any).connectResponseStatusCode !== undefined) {
+					self.responseStatusCode = (err as any).connectResponseStatusCode;
+				}
 				return handler.onError?.(err);
 			},
 			onUpgrade(statusCode: number, rawHeaders: Buffer[] | string[] | null, socket: stream.Duplex): void {
+				self.responseStatusCode = statusCode;
 				if (rawHeaders) {
 					self.responseHeaders = parseRawHeaders(rawHeaders);
 				}

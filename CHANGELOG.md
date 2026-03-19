@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.40.0]
+- Surface `responseHeaders`, `responseStatusCode`, and `responseStatusText` on patched WebSocket for all response types (success, non-upgrade, and proxy errors) ([microsoft/vscode-proxy-agent#94](https://github.com/microsoft/vscode-proxy-agent/pull/94))
+
 ## [0.39.1]
 - Fix WebSocket `ProxyDispatcher` to respect `doResolveProxy` and `addCerts` flags from `createWebSocketPatch` ([microsoft/vscode-proxy-agent#90](https://github.com/microsoft/vscode-proxy-agent/pull/90))
 - Fix intermittent 407 test by checking `res.statusCode` directly
