@@ -716,12 +716,19 @@ function createProxyAgent(
 		proxyTls: proxyCA ? { allowH2, ca: proxyCA } : { allowH2 },
 		clientFactory: (origin: URL, opts: object): undici.Dispatcher => (new undici.Pool(origin, opts) as any).compose((dispatch: undici.Dispatcher['dispatch']) => {
 			class ProxyAuthHandler extends undici.DecoratorHandler {
+				private connectResponseHeaders?: IncomingHttpHeaders;
 				constructor(private dispatch: undici.Dispatcher['dispatch'], private options: undici.Dispatcher.DispatchOptions, private handler: undici.Dispatcher.DispatchHandler, private state: Record<string, any>) {
 					super(handler);
 				}
+				private forwardResponseError(controller: undici.Dispatcher.DispatchController, err: Error): void {
+					if (this.connectResponseHeaders) {
+						(err as any).connectResponseHeaders = this.connectResponseHeaders;
+					}
+					this.handler.onResponseError?.(controller, err);
+				}
 				onResponseError(controller: undici.Dispatcher.DispatchController, err: Error): void {
 					if (!(err instanceof ProxyAuthError)) {
-						return this.handler.onResponseError?.(controller, err);
+						return this.forwardResponseError(controller, err);
 					}
 					(async () => {
 						try {
@@ -730,14 +737,15 @@ function createProxyAgent(
 								setProxyAuthorizationHeader(this.options, proxyAuthorization);
 								this.dispatch(this.options, this);
 							} else {
-								this.handler.onResponseError?.(controller, new undici.errors.RequestAbortedError(`Proxy response (407) ?.== 200 when HTTP Tunneling`)); // Mimick undici's behavior
+								this.forwardResponseError(controller, new undici.errors.RequestAbortedError(`Proxy response (407) ?.== 200 when HTTP Tunneling`)); // Mimick undici's behavior
 							}
 						} catch (err: any) {
-							this.handler.onResponseError?.(controller, err);
+							this.forwardResponseError(controller, err);
 						}
 					})();
 				}
 				onRequestUpgrade?(controller: undici.Dispatcher.DispatchController, statusCode: number, headers: IncomingHttpHeaders, socket: stream.Duplex): void {
+					this.connectResponseHeaders = headers;
 					if (statusCode === 407 && headers) {
 						let proxyAuthenticate: string | string[] | undefined;
 						for (const header in headers) {
@@ -833,22 +841,21 @@ class ProxyDispatcher extends undici.Dispatcher {
 		const self = this;
 		const wrappedHandler: undici.Dispatcher.DispatchHandler = {
 			...handler,
+			// Deprecated API used by undici's internal WebSocket/fetch flow.
+			onHeaders(statusCode: number, rawHeaders: Buffer[], resume: () => void, statusText: string): boolean {
+				self.responseHeaders = parseRawHeaders(rawHeaders);
+				return handler.onHeaders?.(statusCode, rawHeaders, resume, statusText) ?? true;
+			},
+			onError(err: Error): void {
+				const connectHeaders = (err as any).connectResponseHeaders as IncomingHttpHeaders | undefined;
+				if (connectHeaders) {
+					self.responseHeaders = convertHeaders(connectHeaders);
+				}
+				return handler.onError?.(err);
+			},
 			onUpgrade(statusCode: number, rawHeaders: Buffer[] | string[] | null, socket: stream.Duplex): void {
 				if (rawHeaders) {
-					const headers: Record<string, string | string[] | undefined> = {};
-					for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
-						const key = rawHeaders[i].toString().toLowerCase();
-						const value = rawHeaders[i + 1].toString();
-						const existing = headers[key];
-						if (existing === undefined) {
-							headers[key] = value;
-						} else if (Array.isArray(existing)) {
-							existing.push(value);
-						} else {
-							headers[key] = [existing, value];
-						}
-					}
-					self.responseHeaders = headers;
+					self.responseHeaders = parseRawHeaders(rawHeaders);
 				}
 				return handler.onUpgrade?.(statusCode, rawHeaders, socket);
 			},
@@ -895,6 +902,31 @@ class ProxyDispatcher extends undici.Dispatcher {
 	destroy(): Promise<void> {
 		return Promise.resolve();
 	}
+}
+
+function parseRawHeaders(rawHeaders: Buffer[] | string[]): Record<string, string | string[] | undefined> {
+	const headers: Record<string, string | string[] | undefined> = {};
+	for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
+		const key = rawHeaders[i].toString().toLowerCase();
+		const value = rawHeaders[i + 1].toString();
+		const existing = headers[key];
+		if (existing === undefined) {
+			headers[key] = value;
+		} else if (Array.isArray(existing)) {
+			existing.push(value);
+		} else {
+			headers[key] = [existing, value];
+		}
+	}
+	return headers;
+}
+
+function convertHeaders(headers: IncomingHttpHeaders): Record<string, string | string[] | undefined> {
+	const result: Record<string, string | string[] | undefined> = {};
+	for (const key in headers) {
+		result[key.toLowerCase()] = headers[key];
+	}
+	return result;
 }
 
 /** @internal Exported for testing */

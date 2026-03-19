@@ -114,4 +114,50 @@ describe('WebSocket proxied', function () {
 			};
 		});
 	});
+
+	it('should capture response headers on a 404 response', async function () {
+		const params: vpa.ProxyAgentParams = {
+			...directProxyAgentParams,
+			resolveProxy: async () => 'PROXY test-http-proxy:3128',
+		};
+		const { resolveProxyURL } = vpa.createProxyResolver(params);
+		const PatchedWebSocket = vpa.createWebSocketPatch(params, WebSocket as any, resolveProxyURL);
+		const ws = new PatchedWebSocket('wss://test-https-server');
+		await new Promise<void>((resolve, reject) => {
+			ws.onopen = () => {
+				ws.close();
+				reject(new Error('WebSocket should not have connected'));
+			};
+			ws.onerror = () => {
+				const headers = (ws as any).responseHeaders;
+				assert.ok(headers, 'responseHeaders should be defined on error');
+				assert.strictEqual(typeof headers, 'object');
+				assert.ok(headers['content-type'], 'should have content-type header');
+				resolve();
+			};
+		});
+	});
+
+	it('should capture response headers on 407 proxy response', async function () {
+		const params: vpa.ProxyAgentParams = {
+			...directProxyAgentParams,
+			resolveProxy: async () => 'PROXY test-http-auth-proxy:3128',
+		};
+		const { resolveProxyURL } = vpa.createProxyResolver(params);
+		const PatchedWebSocket = vpa.createWebSocketPatch(params, WebSocket as any, resolveProxyURL);
+		const ws = new PatchedWebSocket('wss://test-wss-server');
+		await new Promise<void>((resolve, reject) => {
+			ws.onopen = () => {
+				ws.close();
+				reject(new Error('WebSocket should not have connected'));
+			};
+			ws.onerror = () => {
+				const headers = (ws as any).responseHeaders;
+				assert.ok(headers, 'responseHeaders should be defined on 407');
+				assert.strictEqual(typeof headers, 'object');
+				assert.ok(headers['proxy-authenticate'], 'should have proxy-authenticate header');
+				resolve();
+			};
+		});
+	});
 });
