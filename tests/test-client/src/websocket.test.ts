@@ -107,6 +107,7 @@ describe('WebSocket proxied', function () {
 				assert.ok(headers, 'responseHeaders should be defined');
 				assert.strictEqual(typeof headers, 'object');
 				assert.ok(headers['upgrade'] || headers['connection'], 'should have upgrade response headers');
+				assert.strictEqual((ws as any).responseStatusCode, 101, 'should have 101 status code');
 				resolve();
 			};
 			ws.onerror = (event) => {
@@ -133,6 +134,8 @@ describe('WebSocket proxied', function () {
 				assert.ok(headers, 'responseHeaders should be defined on error');
 				assert.strictEqual(typeof headers, 'object');
 				assert.ok(headers['content-type'], 'should have content-type header');
+				assert.strictEqual((ws as any).responseStatusCode, 404, 'should have 404 status code');
+				assert.strictEqual((ws as any).responseStatusText, 'Not Found', 'should have status message');
 				resolve();
 			};
 		});
@@ -156,6 +159,7 @@ describe('WebSocket proxied', function () {
 				assert.ok(headers, 'responseHeaders should be defined on 407');
 				assert.strictEqual(typeof headers, 'object');
 				assert.ok(headers['proxy-authenticate'], 'should have proxy-authenticate header');
+				assert.strictEqual((ws as any).responseStatusCode, 407, 'should have 407 status code');
 				resolve();
 			};
 		});
