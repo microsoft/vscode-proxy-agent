@@ -162,7 +162,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		results = [];
 	}
 
-	function resolveProxyWithRequest(flags: { useProxySettings: boolean, addCertificatesV1: boolean }, req: http.ClientRequest, opts: http.RequestOptions, url: string, callback: (proxy?: string) => void) {
+	function resolveProxyWithRequest(flags: { useProxySettings: boolean, addCertificatesV1: boolean, testCertificates?: (string | Buffer)[] }, req: http.ClientRequest, opts: http.RequestOptions, url: string, callback: (proxy?: string) => void) {
 		if (!timeout) {
 			timeout = setTimeout(logEvent, 10 * 60 * 1000);
 		}
@@ -175,7 +175,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 				return;
 			}
 			useProxySettings(url, req, stackText, callback);
-		});
+		}, flags.testCertificates);
 	}
 
 	function useProxySettings(url: string, req: http.ClientRequest | undefined, stackText: string, callback: (proxy?: string) => void) {
@@ -364,7 +364,7 @@ function noProxyFromConfig(noProxy: string[]) {
 
 export type ProxySupportSetting = 'override' | 'fallback' | 'on' | 'off';
 
-export type ResolveProxyWithRequest = (flags: { useProxySettings: boolean, addCertificatesV1: boolean }, req: http.ClientRequest, opts: http.RequestOptions, url: string, callback: (proxy?: string) => void) => void;
+export type ResolveProxyWithRequest = (flags: { useProxySettings: boolean, addCertificatesV1: boolean, testCertificates?: (string | Buffer)[] }, req: http.ClientRequest, opts: http.RequestOptions, url: string, callback: (proxy?: string) => void) => void;
 
 export function createHttpPatch(params: ProxyAgentParams, originals: typeof http | typeof https, resolveProxy: ResolveProxyWithRequest) {
 	return {
@@ -419,7 +419,7 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 				} else {
 					options = { ...options };
 				}
-				const resolveP = (req: http.ClientRequest, opts: http.RequestOptions, url: string): Promise<string | undefined> => new Promise<string | undefined>(resolve => resolveProxy({ useProxySettings, addCertificatesV1 }, req, opts, url, resolve));
+				const resolveP = (req: http.ClientRequest, opts: http.RequestOptions, url: string): Promise<string | undefined> => new Promise<string | undefined>(resolve => resolveProxy({ useProxySettings, addCertificatesV1, testCertificates: (options as SecureContextOptionsPatch).testCertificates }, req, opts, url, resolve));
 				const host = options.hostname || options.host;
 				const isLocalhost = !host || host === 'localhost' || host === '127.0.0.1'; // Avoiding https://github.com/microsoft/vscode/issues/120354
 				const agent = createPacProxyAgent(resolveP, {
@@ -427,7 +427,7 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 					lookupProxyAuthorization: params.lookupProxyAuthorization,
 					// keepAlive: ((originalAgent || originals.globalAgent) as { keepAlive?: boolean }).keepAlive, // Skipping due to https://github.com/microsoft/vscode/issues/228872.
 					_vscodeTestReplaceCaCerts: (options as SecureContextOptionsPatch)._vscodeTestReplaceCaCerts,
-				}, opts => new Promise<void>(resolve => addCertificatesToOptionsV1(params, params.addCertificatesV1(), opts, resolve)));
+				}, opts => new Promise<void>(resolve => addCertificatesToOptionsV1(params, params.addCertificatesV1(), opts, resolve, (options as SecureContextOptionsPatch).testCertificates)));
 				agent.protocol = isHttps ? 'https:' : 'http:';
 				options.agent = agent
 				if (isHttps) {
@@ -445,6 +445,7 @@ export function createHttpPatch(params: ProxyAgentParams, originals: typeof http
 export interface SecureContextOptionsPatch {
 	_vscodeAdditionalCaCerts?: (string | Buffer)[];
 	_vscodeTestReplaceCaCerts?: boolean;
+	testCertificates?: (string | Buffer)[];
 }
 
 export function createNetPatch(params: ProxyAgentParams, originals: typeof net) {
@@ -501,6 +502,7 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 		if (!params.addCertificatesV2() || options?.ca) {
 			return original.apply(null, arguments as any);
 		}
+		const testCerts = (options as SecureContextOptionsPatch | undefined)?.testCertificates;
 		let secureConnectListener: (() => void) | undefined = args.find(arg => typeof arg === 'function');
 		if (!options) {
 			options = {};
@@ -532,11 +534,21 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 					for (const cert of _certs.get(!!params.loadSystemCertificatesFromNode())?.result || []) {
 						options!.secureContext!.context.addCACert(cert);
 					}
+					if (testCerts) {
+						for (const cert of testCerts) {
+							options!.secureContext!.context.addCACert(cert);
+						}
+					}
 				});
 			} else {
 				params.log.trace('ProxyResolver#tls.connect existing socket already connected - adding certs');
 				for (const cert of certificates) {
 					options!.secureContext!.context.addCACert(cert);
+				}
+				if (testCerts) {
+					for (const cert of testCerts) {
+						options!.secureContext!.context.addCACert(cert);
+					}
 				}
 			}
 		} else {
@@ -551,6 +563,11 @@ function patchTlsConnect(params: ProxyAgentParams, original: typeof tls.connect)
 					params.log.trace('ProxyResolver#tls.connect adding certs before connecting socket');
 					for (const cert of caCertificates) {
 						options!.secureContext!.context.addCACert(cert);
+					}
+					if (testCerts) {
+						for (const cert of testCerts) {
+							options!.secureContext!.context.addCACert(cert);
+						}
 					}
 					if (options?.timeout) {
 						socket.setTimeout(options.timeout);
@@ -1092,14 +1109,15 @@ function getAgentOptions(requestInit: RequestInit | undefined) {
 	return { dispatcher, allowH2, requestCA, proxyCA, socketPath };
 }
 
-function addCertificatesToOptionsV1(params: ProxyAgentParams, addCertificatesV1: boolean, opts: http.RequestOptions | tls.ConnectionOptions, callback: () => void) {
+function addCertificatesToOptionsV1(params: ProxyAgentParams, addCertificatesV1: boolean, opts: http.RequestOptions | tls.ConnectionOptions, callback: () => void, testCertificates?: (string | Buffer)[]) {
 	if (addCertificatesV1) {
 		getOrLoadAdditionalCertificates(params)
 			.then(caCertificates => {
+				const allCerts: (string | Buffer)[] = testCertificates?.length ? [...caCertificates, ...testCertificates] : caCertificates;
 				if ((opts as SecureContextOptionsPatch)._vscodeTestReplaceCaCerts) {
-					(opts as https.RequestOptions).ca = caCertificates;
+					(opts as https.RequestOptions).ca = allCerts;
 				} else {
-					(opts as SecureContextOptionsPatch)._vscodeAdditionalCaCerts = caCertificates;
+					(opts as SecureContextOptionsPatch)._vscodeAdditionalCaCerts = allCerts;
 				}
 				callback();
 			})
@@ -1266,7 +1284,7 @@ export function toLogString(args: any[]) {
 			const t = typeof value;
 			if (t === 'object') {
 				if (key) {
-					if ((key === 'ca' || key === '_vscodeAdditionalCaCerts') && Array.isArray(value)) {
+					if ((key === 'ca' || key === '_vscodeAdditionalCaCerts' || key === 'testCertificates') && Array.isArray(value)) {
 						return `[${value.length} certs]`;
 					}
 					if (key === 'ca' && (typeof value === 'string' || Buffer.isBuffer(value))) {
@@ -1291,9 +1309,4 @@ export function toLogString(args: any[]) {
 		})).join(', ')}]`;
 }
 
-/**
- * Certificates for testing. These are not automatically used, but can be added in
- * ProxyAgentParams#loadAdditionalCertificates(). This just provides a shared array
- * between production code and tests.
- */
-export const testCertificates: string[] = [];
+
