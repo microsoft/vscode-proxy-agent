@@ -269,4 +269,5 @@ type PacProxyAgentOptions =
 	fallbackToDirect?: boolean;
 	originalAgent?: false | http.Agent;
 	_vscodeTestReplaceCaCerts?: boolean;
+	testCertificates?: (string | Buffer)[];
 }

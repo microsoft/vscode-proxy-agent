@@ -194,6 +194,28 @@ describe('Direct client', function () {
 			_vscodeTestReplaceCaCerts: true,
 		});
 	});
+	it('should use testCertificates request option', async function () {
+		const noAdditionalCertsParams: vpa.ProxyAgentParams = {
+			...directProxyAgentParamsV1,
+			loadAdditionalCertificates: async () => [],
+		};
+		vpa.resetCaches();
+		try {
+			const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(noAdditionalCertsParams);
+			const patchedHttps: typeof https = {
+				...https,
+				...vpa.createHttpPatch(noAdditionalCertsParams, https, resolveProxy),
+			} as any;
+			await testRequest(patchedHttps, {
+				hostname: 'test-https-server',
+				path: '/test-path',
+				_vscodeTestReplaceCaCerts: true,
+				testCertificates: ca,
+			});
+		} finally {
+			vpa.resetCaches();
+		}
+	});
 	it('should use ca request option', async function () {
 		const { resolveProxyWithRequest: resolveProxy } = vpa.createProxyResolver(directProxyAgentParamsV1);
 		const patchedHttps: typeof https = {
