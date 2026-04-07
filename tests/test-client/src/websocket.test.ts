@@ -164,4 +164,48 @@ describe('WebSocket proxied', function () {
 			};
 		});
 	});
+
+	it('should capture networkError on HTTP proxy connection refused', async function () {
+		const params: vpa.ProxyAgentParams = {
+			...directProxyAgentParams,
+			resolveProxy: async () => 'PROXY 127.0.0.1:1',
+		};
+		const { resolveProxyURL } = vpa.createProxyResolver(params);
+		const PatchedWebSocket = vpa.createWebSocketPatch(params, WebSocket as any, resolveProxyURL);
+		const ws = new PatchedWebSocket('wss://test-wss-server');
+		await new Promise<void>((resolve, reject) => {
+			ws.onopen = () => {
+				ws.close();
+				reject(new Error('WebSocket should not have connected'));
+			};
+			ws.onerror = () => {
+				const networkError: Error | undefined = (ws as any).networkError;
+				assert.ok(networkError, 'networkError should be defined');
+				assert.ok(networkError instanceof Error, 'networkError should be an Error');
+				resolve();
+			};
+		});
+	});
+
+	it('should capture networkError on HTTPS proxy connection refused', async function () {
+		const params: vpa.ProxyAgentParams = {
+			...directProxyAgentParams,
+			resolveProxy: async () => 'HTTPS 127.0.0.1:1',
+		};
+		const { resolveProxyURL } = vpa.createProxyResolver(params);
+		const PatchedWebSocket = vpa.createWebSocketPatch(params, WebSocket as any, resolveProxyURL);
+		const ws = new PatchedWebSocket('wss://test-wss-server');
+		await new Promise<void>((resolve, reject) => {
+			ws.onopen = () => {
+				ws.close();
+				reject(new Error('WebSocket should not have connected'));
+			};
+			ws.onerror = () => {
+				const networkError: Error | undefined = (ws as any).networkError;
+				assert.ok(networkError, 'networkError should be defined');
+				assert.ok(networkError instanceof Error, 'networkError should be an Error');
+				resolve();
+			};
+		});
+	});
 });

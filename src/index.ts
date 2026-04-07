@@ -825,6 +825,11 @@ export function createWebSocketPatch(params: ProxyAgentParams, originalWebSocket
 			enumerable: true,
 			configurable: true,
 		});
+		Object.defineProperty(ws, 'networkError', {
+			get() { return proxyDispatcher.networkError; },
+			enumerable: true,
+			configurable: true,
+		});
 		return ws;
 	} as unknown as typeof globalThis.WebSocket;
 
@@ -843,6 +848,7 @@ class ProxyDispatcher extends undici.Dispatcher {
 	responseHeaders?: Record<string, string | string[] | undefined>;
 	responseStatusCode?: number;
 	responseStatusText?: string;
+	networkError?: Error;
 
 	constructor(
 		private params: ProxyAgentParams,
@@ -856,31 +862,53 @@ class ProxyDispatcher extends undici.Dispatcher {
 
 	dispatch(opts: undici.Dispatcher.DispatchOptions, handler: undici.Dispatcher.DispatchHandler): boolean {
 		const self = this;
+		function captureError(err: Error): void {
+			const connectHeaders = (err as any).connectResponseHeaders as IncomingHttpHeaders | undefined;
+			if (connectHeaders) {
+				self.responseHeaders = convertHeaders(connectHeaders);
+			}
+			if ((err as any).connectResponseStatusCode !== undefined) {
+				self.responseStatusCode = (err as any).connectResponseStatusCode;
+			}
+			if (!self.networkError) {
+				self.networkError = err;
+			}
+		}
 		const wrappedHandler: undici.Dispatcher.DispatchHandler = {
 			...handler,
-			// Deprecated API used by undici's internal WebSocket/fetch flow.
+			// Current API.
+			onResponseStart(controller: undici.Dispatcher.DispatchController, statusCode: number, headers: IncomingHttpHeaders, statusMessage?: string): void {
+				self.responseStatusCode = statusCode;
+				self.responseStatusText = statusMessage;
+				self.responseHeaders = convertHeaders(headers);
+				return handler.onResponseStart?.(controller, statusCode, headers, statusMessage);
+			},
+			onResponseError(controller: undici.Dispatcher.DispatchController, err: Error): void {
+				captureError(err);
+				return handler.onResponseError?.(controller, err);
+			},
+			onRequestUpgrade(controller: undici.Dispatcher.DispatchController, statusCode: number, headers: IncomingHttpHeaders, socket: stream.Duplex): void {
+				self.responseStatusCode = statusCode;
+				self.responseHeaders = convertHeaders(headers);
+				return handler.onRequestUpgrade?.(controller, statusCode, headers, socket);
+			},
+			// Deprecated API still used by undici's internal core.
 			onHeaders(statusCode: number, rawHeaders: Buffer[], resume: () => void, statusText: string): boolean {
 				self.responseStatusCode = statusCode;
 				self.responseStatusText = statusText;
 				self.responseHeaders = parseRawHeaders(rawHeaders);
-				return handler.onHeaders?.(statusCode, rawHeaders, resume, statusText) ?? true;
+				return (handler as any).onHeaders?.(statusCode, rawHeaders, resume, statusText) ?? true;
 			},
 			onError(err: Error): void {
-				const connectHeaders = (err as any).connectResponseHeaders as IncomingHttpHeaders | undefined;
-				if (connectHeaders) {
-					self.responseHeaders = convertHeaders(connectHeaders);
-				}
-				if ((err as any).connectResponseStatusCode !== undefined) {
-					self.responseStatusCode = (err as any).connectResponseStatusCode;
-				}
-				return handler.onError?.(err);
+				captureError(err);
+				return (handler as any).onError?.(err);
 			},
 			onUpgrade(statusCode: number, rawHeaders: Buffer[] | string[] | null, socket: stream.Duplex): void {
 				self.responseStatusCode = statusCode;
 				if (rawHeaders) {
 					self.responseHeaders = parseRawHeaders(rawHeaders);
 				}
-				return handler.onUpgrade?.(statusCode, rawHeaders, socket);
+				return (handler as any).onUpgrade?.(statusCode, rawHeaders, socket);
 			},
 		};
 		const url = opts.origin?.toString();
@@ -908,11 +936,7 @@ class ProxyDispatcher extends undici.Dispatcher {
 				}
 				dispatcher.dispatch(opts, wrappedHandler);
 			} catch (err: any) {
-				if (typeof (handler as any).onResponseError === 'function') {
-					(handler as any).onResponseError(null, err);
-				} else if (typeof (handler as any).onError === 'function') {
-					(handler as any).onError(err);
-				}
+				handler.onResponseError?.(null as any, err);
 			}
 		})();
 		return true;
