@@ -128,8 +128,19 @@ export class PacProxyAgent extends Agent {
 			req.emit('proxy', { proxy, error: err });
 		}
 
-		throw new Error(`Failed to establish a socket connection to proxies: ${result}`);
+		throw new Error(`Failed to establish a socket connection to proxies: ${sanitizeProxyResultCredentials(result)}`);
 	}
+}
+
+/**
+ * Replaces credentials (userinfo) in proxy resolver result strings with a placeholder.
+ * E.g., "PROXY user:pass@host:8080" → "PROXY <credentials>@host:8080"
+ */
+export function sanitizeProxyResultCredentials(result: string | undefined): string {
+	if (!result) {
+		return '';
+	}
+	return String(result).replace(/(\b(?:PROXY|HTTPS?|SOCKS[45]?)\s+)[^\s@]+@/gi, '$1<credentials>@');
 }
 
 export function getProxyURLFromResolverResult(result: string | undefined) {
