@@ -651,13 +651,13 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 }
 
 let previousAddCertsAgent: boolean | undefined = undefined;
-let defaultAgent: undici.Agent | undefined = undefined;
-let agentCache = new WeakMap<undici.Dispatcher, undici.Agent>();
-function getAgent(originalDispatcher: undici.Dispatcher | undefined, allowH2: boolean | undefined, requestCA: string | Buffer | (string | Buffer)[] | undefined, currentAddCerts: boolean): undici.Agent | undefined {
+let defaultAgent: undici.Dispatcher.ComposedDispatcher | undefined = undefined;
+let agentCache = new WeakMap<undici.Dispatcher, undici.Dispatcher.ComposedDispatcher>();
+function getAgent(originalDispatcher: undici.Dispatcher | undefined, allowH2: boolean | undefined, requestCA: string | Buffer | (string | Buffer)[] | undefined, currentAddCerts: boolean): undici.Dispatcher.ComposedDispatcher | undefined {
 	if (previousAddCertsAgent !== currentAddCerts) {
 		previousAddCertsAgent = currentAddCerts;
 		defaultAgent = undefined;
-		agentCache = new WeakMap<undici.Dispatcher, undici.Agent>();
+		agentCache = new WeakMap<undici.Dispatcher, undici.Dispatcher.ComposedDispatcher>();
 	}
 	if (!originalDispatcher) {
 		if (!defaultAgent) {
@@ -676,13 +676,13 @@ function createAgent(allowH2: boolean | undefined, requestCA: string | Buffer | 
 	return new undici.Agent({
 		allowH2,
 		connect: { ca: requestCA },
-	});
+	}).compose(undici.interceptors.cache({ type: 'private' }));
 }
 
 let previousAddCertsProxyAgent: boolean | undefined = undefined;
 let previousLookupProxyAuthorization: LookupProxyAuthorization | undefined = undefined;
-let defaultProxyAgents = new Map<string, undici.ProxyAgent>();
-let proxyAgentCache = new WeakMap<undici.Dispatcher, Map<string, undici.ProxyAgent>>();
+let defaultProxyAgents = new Map<string, undici.Dispatcher.ComposedDispatcher>();
+let proxyAgentCache = new WeakMap<undici.Dispatcher, Map<string, undici.Dispatcher.ComposedDispatcher>>();
 function getProxyAgent(
 	params: ProxyAgentParams,
 	originalDispatcher: undici.Dispatcher | undefined,
@@ -691,13 +691,13 @@ function getProxyAgent(
 	requestCA: string | Buffer | (string | Buffer)[] | undefined,
 	proxyCA: string | Buffer | (string | Buffer)[] | undefined,
 	currentAddCerts: boolean,
-): undici.ProxyAgent {
+): undici.Dispatcher.ComposedDispatcher {
 	const shouldClearCache = previousAddCertsProxyAgent !== currentAddCerts || previousLookupProxyAuthorization !== params.lookupProxyAuthorization;
 	if (shouldClearCache) {
 		previousAddCertsProxyAgent = currentAddCerts;
 		previousLookupProxyAuthorization = params.lookupProxyAuthorization;
-		defaultProxyAgents = new Map<string, undici.ProxyAgent>();
-		proxyAgentCache = new WeakMap<undici.Dispatcher, Map<string, undici.ProxyAgent>>();
+		defaultProxyAgents = new Map<string, undici.Dispatcher.ComposedDispatcher>();
+		proxyAgentCache = new WeakMap<undici.Dispatcher, Map<string, undici.Dispatcher.ComposedDispatcher>>();
 	}
 
 	if (!originalDispatcher) {
@@ -709,7 +709,7 @@ function getProxyAgent(
 
 	let dispatcherCache = proxyAgentCache.get(originalDispatcher);
 	if (!dispatcherCache) {
-		dispatcherCache = new Map<string, undici.ProxyAgent>();
+		dispatcherCache = new Map<string, undici.Dispatcher.ComposedDispatcher>();
 		proxyAgentCache.set(originalDispatcher, dispatcherCache);
 	}
 
@@ -725,7 +725,7 @@ function createProxyAgent(
 	allowH2: boolean | undefined,
 	requestCA: string | Buffer | (string | Buffer)[] | undefined,
 	proxyCA: string | Buffer | (string | Buffer)[] | undefined,
-): undici.ProxyAgent {
+): undici.Dispatcher.ComposedDispatcher {
 	return new undici.ProxyAgent({
 		uri: proxyURL,
 		allowH2,
@@ -800,7 +800,7 @@ function createProxyAgent(
 				})();
 			};
 		}),
-	});
+	}).compose(undici.interceptors.cache({ type: 'private' }));
 }
 
 export function createWebSocketPatch(params: ProxyAgentParams, originalWebSocket: typeof globalThis.WebSocket, resolveProxyURL: (url: string) => Promise<string | undefined>) {
