@@ -429,6 +429,71 @@ describe('Proxied client', function () {
 			vpa.resetCaches();
 		}
 	});
+
+	describe('fetch interceptor composition', function () {
+		it('composes user-supplied interceptors on the proxy path', async function () {
+			const { resolveProxyURL } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
+			let calls = 0;
+			let lastPath: string | undefined;
+			const recorder: undici.Dispatcher.DispatcherComposeInterceptor = (dispatch) => (opts, handler) => {
+				calls++;
+				lastPath = opts.path;
+				return dispatch(opts, handler);
+			};
+			const patchedFetch = (vpa.createFetchPatch as any)(proxiedProxyAgentParamsV1, globalThis.fetch, resolveProxyURL, {
+				interceptors: [recorder],
+			});
+
+			const res = await patchedFetch('https://test-https-server/test-path');
+
+			assert.strictEqual(res.status, 200);
+			assert.strictEqual((await res.json()).status, 'OK!');
+			assert.strictEqual(calls, 1, 'recording interceptor should observe the request even when tunneled through a proxy');
+			assert.strictEqual(lastPath, '/test-path');
+		});
+
+		it('reuses the composed dispatcher across requests with a stable interceptors array (proxy path)', async function () {
+			const { resolveProxyURL } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
+			const capturedDispatchers: unknown[] = [];
+			const interceptors: undici.Dispatcher.DispatcherComposeInterceptor[] = [
+				(dispatch) => (opts, handler) => dispatch(opts, handler),
+			];
+			const spyFetch: typeof globalThis.fetch = (input, init) => {
+				capturedDispatchers.push((init as any)?.dispatcher);
+				return globalThis.fetch(input, init);
+			};
+			const patchedFetch = (vpa.createFetchPatch as any)(proxiedProxyAgentParamsV1, spyFetch, resolveProxyURL, {
+				interceptors,
+			});
+
+			await patchedFetch('https://test-https-server/test-path');
+			await patchedFetch('https://test-https-server/test-path');
+
+			assert.strictEqual(capturedDispatchers.length, 2);
+			assert.ok(capturedDispatchers[0], 'first proxied request should carry a composed dispatcher');
+			assert.strictEqual(capturedDispatchers[0], capturedDispatchers[1], 'composed proxy dispatcher should be reused for the same (proxy agent, interceptors) pair');
+		});
+
+		it('composes undici.interceptors.cache through the proxy', async function () {
+			const { resolveProxyURL } = vpa.createProxyResolver(proxiedProxyAgentParamsV1);
+			const cacheInterceptor = undici.interceptors.cache({
+				store: new (undici as any).cacheStores.MemoryCacheStore(),
+				type: 'private',
+			});
+			const patchedFetch = (vpa.createFetchPatch as any)(proxiedProxyAgentParamsV1, globalThis.fetch, resolveProxyURL, {
+				interceptors: [cacheInterceptor],
+			});
+			const url = 'https://test-https-server/test-cacheable';
+
+			const first = await patchedFetch(url);
+			assert.strictEqual(first.status, 200);
+			assert.strictEqual(first.headers.get('age'), null);
+
+			const second = await patchedFetch(url);
+			assert.strictEqual(second.status, 200);
+			assert.notStrictEqual(second.headers.get('age'), null, 'second response should be served from the cache when interceptors are composed on the proxy dispatcher');
+		});
+	});
 });
 
 // From microsoft/vscode's proxyResolver.ts:
