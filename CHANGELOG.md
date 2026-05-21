@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.42.0]
+- Add `interceptors` option to `createFetchPatch` for composing additional undici interceptors (e.g. RFC 9111 cache) on the patched `fetch` at construction time ([microsoft/vscode-proxy-agent#100](https://github.com/microsoft/vscode-proxy-agent/pull/100))
+
 ## [0.41.0]
 - Surface network errors with proxies ([microsoft/vscode#298236](https://github.com/microsoft/vscode/issues/298236))
 - Support `testCertificates` request option for adding test certificates via request options instead of global state

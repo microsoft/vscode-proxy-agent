@@ -448,6 +448,10 @@ export interface SecureContextOptionsPatch {
 	testCertificates?: (string | Buffer)[];
 }
 
+export interface CreateFetchPatchOptions {
+	interceptors?: readonly undici.Dispatcher.DispatcherComposeInterceptor[];
+}
+
 export function createNetPatch(params: ProxyAgentParams, originals: typeof net) {
 	return {
 		connect: patchNetConnect(params, originals.connect),
@@ -610,7 +614,23 @@ function patchCreateSecureContext(original: typeof tls.createSecureContext): typ
 	};
 }
 
-export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof globalThis.fetch, resolveProxyURL: (url: string) => Promise<string | undefined>) {
+export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof globalThis.fetch, resolveProxyURL: (url: string) => Promise<string | undefined>, options?: CreateFetchPatchOptions) {
+	const interceptors = options?.interceptors;
+	const hasInterceptors = !!interceptors && interceptors.length > 0;
+	// Caches the composed dispatcher per base agent so all requests share the
+	// same composed dispatcher.
+	const composedAgentCache = hasInterceptors ? new WeakMap<undici.Dispatcher, undici.Dispatcher>() : undefined;
+	function withInterceptors(agent: undici.Dispatcher | undefined): undici.Dispatcher | undefined {
+		if (!agent || !composedAgentCache) {
+			return agent;
+		}
+		let composed = composedAgentCache.get(agent);
+		if (!composed) {
+			composed = agent.compose(...interceptors!);
+			composedAgentCache.set(agent, composed);
+		}
+		return composed;
+	}
 	return async function patchedFetch(input: string | URL | Request, init?: RequestInit) {
 		if (!params.isAdditionalFetchSupportEnabled()) {
 			return originalFetch(input, init);
@@ -637,14 +657,14 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 		if (!proxyURL) {
 			const modifiedInit = {
 				...init,
-				dispatcher: getAgent(agentOptions.dispatcher, allowH2, requestCA, addCerts),
+				dispatcher: withInterceptors(getAgent(agentOptions.dispatcher, allowH2, requestCA, addCerts)),
 			};
 			return originalFetch(input, modifiedInit);
 		}
 
 		const modifiedInit = {
 			...init,
-			dispatcher: getProxyAgent(params, agentOptions.dispatcher, proxyURL, allowH2, requestCA, proxyCA, addCerts),
+			dispatcher: withInterceptors(getProxyAgent(params, agentOptions.dispatcher, proxyURL, allowH2, requestCA, proxyCA, addCerts)),
 		};
 		return originalFetch(input, modifiedInit);
 	};

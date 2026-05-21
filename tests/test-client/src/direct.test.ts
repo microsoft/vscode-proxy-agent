@@ -351,4 +351,88 @@ describe('Direct client', function () {
 		assert.strictEqual(res.status, 200);
 		assert.strictEqual((await res.json()).status, 'OK HTTP2!');
 	});
+
+	describe('fetch interceptor composition', function () {
+		function makeRecordingInterceptor() {
+			let calls = 0;
+			let lastPath: string | undefined;
+			const interceptor: undici.Dispatcher.DispatcherComposeInterceptor = (dispatch) => (opts, handler) => {
+				calls++;
+				lastPath = opts.path;
+				return dispatch(opts, handler);
+			};
+			return {
+				interceptor,
+				get calls() { return calls; },
+				get lastPath() { return lastPath; },
+			};
+		}
+
+		it('composes user-supplied interceptors on the direct (CA-injection) path', async function () {
+			const { resolveProxyURL } = vpa.createProxyResolver(directProxyAgentParamsV1);
+			const recorder = makeRecordingInterceptor();
+			const patchedFetch = (vpa.createFetchPatch as any)(directProxyAgentParamsV1, globalThis.fetch, resolveProxyURL, {
+				interceptors: [recorder.interceptor],
+			});
+
+			const res = await patchedFetch('https://test-https-server/test-path');
+
+			assert.strictEqual(res.status, 200);
+			assert.strictEqual((await res.json()).status, 'OK!');
+			assert.strictEqual(recorder.calls, 1, 'recording interceptor should observe the request');
+			assert.strictEqual(recorder.lastPath, '/test-path');
+		});
+
+		it('reuses the composed dispatcher across requests with a stable interceptors array', async function () {
+			const { resolveProxyURL } = vpa.createProxyResolver(directProxyAgentParamsV1);
+			const capturedDispatchers: unknown[] = [];
+			const interceptors = [makeRecordingInterceptor().interceptor];
+			const spyFetch: typeof globalThis.fetch = (input, init) => {
+				capturedDispatchers.push((init as any)?.dispatcher);
+				return globalThis.fetch(input, init);
+			};
+			const patchedFetch = (vpa.createFetchPatch as any)(directProxyAgentParamsV1, spyFetch, resolveProxyURL, {
+				interceptors,
+			});
+
+			await patchedFetch('https://test-https-server/test-path');
+			await patchedFetch('https://test-https-server/test-path');
+
+			assert.strictEqual(capturedDispatchers.length, 2);
+			assert.ok(capturedDispatchers[0], 'first request should carry a composed dispatcher');
+			assert.strictEqual(capturedDispatchers[0], capturedDispatchers[1], 'composed dispatcher should be reused for the same (agent, interceptors) pair');
+		});
+
+		it('composes undici.interceptors.cache so a cacheable response is served from cache on the second fetch', async function () {
+			const { resolveProxyURL } = vpa.createProxyResolver(directProxyAgentParamsV1);
+			const cacheInterceptor = undici.interceptors.cache({
+				store: new (undici as any).cacheStores.MemoryCacheStore(),
+				type: 'private',
+			});
+			const patchedFetch = (vpa.createFetchPatch as any)(directProxyAgentParamsV1, globalThis.fetch, resolveProxyURL, {
+				interceptors: [cacheInterceptor],
+			});
+			const url = 'https://test-https-server/test-cacheable';
+
+			const first = await patchedFetch(url);
+			assert.strictEqual(first.status, 200);
+			assert.strictEqual((await first.json()).status, 'OK CACHEABLE!');
+			assert.strictEqual(first.headers.get('age'), null, 'first response should not carry an Age header');
+
+			const second = await patchedFetch(url);
+			assert.strictEqual(second.status, 200);
+			assert.strictEqual((await second.json()).status, 'OK CACHEABLE!');
+			assert.notStrictEqual(second.headers.get('age'), null, 'second response should be served from the cache (Age header)');
+		});
+
+		it('falls back to no interceptors when createFetchPatch options omit interceptors', async function () {
+			const { resolveProxyURL } = vpa.createProxyResolver(directProxyAgentParamsV1);
+			const patchedFetch = vpa.createFetchPatch(directProxyAgentParamsV1, globalThis.fetch, resolveProxyURL);
+
+			const res = await patchedFetch('https://test-https-server/test-path');
+
+			assert.strictEqual(res.status, 200);
+			assert.strictEqual((await res.json()).status, 'OK!');
+		});
+	});
 });
