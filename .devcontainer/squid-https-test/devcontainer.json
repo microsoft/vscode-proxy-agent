@@ -1,0 +1,6 @@
+{
+	"name": "Squid HTTPS Test",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "devcontainer",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/.devcontainer/squid-https-test"
+}
