@@ -1,0 +1,13 @@
+version: '3.4'
+
+services:
+    devcontainer:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        volumes:
+          - ../../..:/workspaces
+          - ./squid-ssl:/etc/squid/ssl
+        ports:
+            - "127.0.0.1:3133:3128"
+        command: /bin/sh -c "/usr/local/bin/setup.sh && sleep inf"

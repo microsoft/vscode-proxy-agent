@@ -1,0 +1,13 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "squid",
+            "type": "shell",
+            "command": "stunnel /etc/stunnel/stunnel.conf & squid -N -d1 -f /etc/squid/squid.conf & sleep 2 && tail -n +1 -F /var/log/squid/access.log",
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        }
+    ]
+}
