@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.43.0]
+- Add `resolveProxyByURL` to `createProxyResolver`, returning the resolved proxy `url`, `type` (`DIRECT`/`PROXY`/`HTTP`/`HTTPS`/`SOCKS`/`SOCKS5`/`SOCKS4`/`EMPTY`/`UNRECOGNIZED`) and `source` (`localhost`/`noProxyConfig`/`noProxyEnv`/`setting`/`env`/`remote`/`system_cached`/`system`/`fallback`). `getProxyURLFromResolverResult` now also returns the resolved `type`. The existing `resolveProxyURL` is unchanged.
+
 ## [0.42.0]
 - Add `interceptors` option to `createFetchPatch` for composing additional undici interceptors (e.g. RFC 9111 cache) on the patched `fetch` at construction time ([microsoft/vscode-proxy-agent#100](https://github.com/microsoft/vscode-proxy-agent/pull/100))
 

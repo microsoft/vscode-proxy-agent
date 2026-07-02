@@ -143,10 +143,20 @@ export function sanitizeProxyResultCredentials(result: string | undefined): stri
 	return String(result).replace(/(\b(?:PROXY|HTTPS?|SOCKS[45]?)\s+)[^\s@]+@/gi, '$1<credentials>@');
 }
 
-export function getProxyURLFromResolverResult(result: string | undefined) {
+/**
+ * The kind of proxy that was resolved for a URL, as reported by the PAC-style
+ * resolver result (`DIRECT`, `PROXY`, `HTTP`, `HTTPS`, `SOCKS`, `SOCKS5`,
+ * `SOCKS4`). Note `HTTP` and `PROXY` both denote an HTTP proxy, and `SOCKS`
+ * denotes SOCKSv5. `EMPTY` means no result was returned at all (falsy) and
+ * `UNRECOGNIZED` means a non-empty result was returned but none of its entries
+ * used a known scheme; both are treated as a direct connection.
+ */
+export type ProxyResolveType = 'DIRECT' | 'PROXY' | 'HTTP' | 'HTTPS' | 'SOCKS' | 'SOCKS5' | 'SOCKS4' | 'EMPTY' | 'UNRECOGNIZED';
+
+export function getProxyURLFromResolverResult(result: string | undefined): { proxy: string; url: string | undefined; type: ProxyResolveType } {
 	// Default to "DIRECT" if a falsey value was returned (or nothing)
 	if (!result) {
-		return { proxy: 'DIRECT', url: undefined };
+		return { proxy: 'DIRECT', url: undefined, type: 'EMPTY' };
 	}
 
 	const proxies = String(result)
@@ -159,13 +169,13 @@ export function getProxyURLFromResolverResult(result: string | undefined) {
 		debug('Attempting to use proxy: %o', proxy);
 
 		if (type === 'DIRECT') {
-			return { proxy, url: undefined };
+			return { proxy, url: undefined, type };
 		} else if (type === 'SOCKS' || type === 'SOCKS5') {
 			// Use a SOCKSv5h proxy
-			return { proxy, url: `socks://${target}` };
+			return { proxy, url: `socks://${target}`, type };
 		} else if (type === 'SOCKS4') {
 			// Use a SOCKSv4a proxy
-			return { proxy, url: `socks4a://${target}` };
+			return { proxy, url: `socks4a://${target}`, type };
 		} else if (
 			type === 'PROXY' ||
 			type === 'HTTP' ||
@@ -173,10 +183,12 @@ export function getProxyURLFromResolverResult(result: string | undefined) {
 		) {
 			// Use an HTTP or HTTPS proxy
 			// http://dev.chromium.org/developers/design-documents/secure-web-proxy
-			return { proxy, url: `${type === 'HTTPS' ? 'https' : 'http'}://${target}` };
+			return { proxy, url: `${type === 'HTTPS' ? 'https' : 'http'}://${target}`, type };
 		}
 	}
-	return { proxy: 'DIRECT', url: undefined };
+	// A non-empty result was returned but no entry used a known scheme; fall back
+	// to a direct connection while reporting the result as unrecognized.
+	return { proxy: 'DIRECT', url: undefined, type: 'UNRECOGNIZED' };
 }
 
 type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate: string | string[] | undefined, state: Record<string, any>) => Promise<string | undefined>;
