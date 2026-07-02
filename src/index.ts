@@ -15,7 +15,7 @@ import * as crypto from 'crypto';
 import * as undici from 'undici';
 import * as stream from 'stream';
 
-import { createPacProxyAgent, getProxyURLFromResolverResult, PacProxyAgent } from './agent';
+import { createPacProxyAgent, getProxyURLFromResolverResult, PacProxyAgent, ProxyResolveType } from './agent';
 import type { IncomingHttpHeaders } from 'undici/types/header';
 
 export enum LogLevel {
@@ -80,6 +80,35 @@ export interface ProxyAgentParams {
 	isUseHostProxyEnabled: () => boolean;
 	getNetworkInterfaceCheckInterval?: () => number;
 	env: NodeJS.ProcessEnv;
+}
+
+export type { ProxyResolveType } from './agent';
+
+/**
+ * Which configuration determined the resolved proxy. Mirrors the resolution
+ * order in `useProxySettings`:
+ * - `localhost`: the target is a loopback host (always direct).
+ * - `noProxyConfig`: excluded by the `http.noProxy` setting.
+ * - `noProxyEnv`: excluded by the `no_proxy`/`NO_PROXY` environment variable.
+ * - `setting`: the `http.proxy` setting (via `getProxyURL`).
+ * - `env`: the `http(s)_proxy` environment variable.
+ * - `remote`: host proxy resolution is disabled (`isUseHostProxyEnabled` is false), e.g. in remote scenarios.
+ * - `system_cached`: served from the in-memory cache of a previous system resolution.
+ * - `system`: resolved via the operating system / PAC (`resolveProxy`).
+ * - `fallback`: system resolution failed and a cached proxy was used as fallback.
+ */
+export type ProxyResolveSource = 'localhost' | 'noProxyConfig' | 'noProxyEnv' | 'setting' | 'env' | 'remote' | 'system_cached' | 'system' | 'fallback';
+
+/**
+ * Structured result of {@link createProxyResolver}'s `resolveProxyByURL`.
+ */
+export interface ResolvedProxyInfo {
+	/** The resolved proxy URL, or `undefined` for a direct connection. */
+	url: string | undefined;
+	/** The resolved proxy type. */
+	type: ProxyResolveType;
+	/** Which configuration determined the result. */
+	source: ProxyResolveSource;
 }
 
 export function createProxyResolver(params: ProxyAgentParams) {
@@ -178,13 +207,13 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		}, flags.testCertificates);
 	}
 
-	function useProxySettings(url: string, req: http.ClientRequest | undefined, stackText: string, callback: (proxy?: string) => void) {
+	function useProxySettings(url: string, req: http.ClientRequest | undefined, stackText: string, callback: (proxy: string | undefined, source: ProxyResolveSource) => void) {
 		const parsedUrl = nodeurl.parse(url); // Coming from Node's URL, sticking with that.
 
 		const hostname = parsedUrl.hostname;
 		if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '::ffff:127.0.0.1') {
 			localhostCount++;
-			callback('DIRECT');
+			callback('DIRECT', 'localhost');
 			log.debug('ProxyResolver#resolveProxy localhost', url, 'DIRECT', stackText);
 			return;
 		}
@@ -198,14 +227,14 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			let configNoProxy = noProxyFromConfig(noProxyConfig); // Not standardized.
 			if (typeof hostname === 'string' && configNoProxy(hostname, String(parsedUrl.port || defaultPort))) {
 				configNoProxyCount++;
-				callback('DIRECT');
+				callback('DIRECT', 'noProxyConfig');
 				log.debug('ProxyResolver#resolveProxy configNoProxy', url, 'DIRECT', stackText);
 				return;
 			}
 		} else {
 			if (typeof hostname === 'string' && envNoProxy(hostname, String(parsedUrl.port || defaultPort))) {
 				envNoProxyCount++;
-				callback('DIRECT');
+				callback('DIRECT', 'noProxyEnv');
 				log.debug('ProxyResolver#resolveProxy envNoProxy', url, 'DIRECT', stackText);
 				return;
 			}	
@@ -214,20 +243,20 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		let settingsProxy = proxyFromConfigURL(getProxyURL());
 		if (settingsProxy) {
 			settingsCount++;
-			callback(settingsProxy);
+			callback(settingsProxy, 'setting');
 			log.debug('ProxyResolver#resolveProxy settings', url, settingsProxy, stackText);
 			return;
 		}
 
 		if (envProxy) {
 			envCount++;
-			callback(envProxy);
+			callback(envProxy, 'env');
 			log.debug('ProxyResolver#resolveProxy env', url, envProxy, stackText);
 			return;
 		}
 
 		if (!params.isUseHostProxyEnabled()) {
-			callback('DIRECT');
+			callback('DIRECT', 'remote');
 			log.debug('ProxyResolver#resolveProxy unconfigured', url, 'DIRECT', stackText);
 			return;
 		}
@@ -239,7 +268,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			if (req) {
 				collectResult(results, proxy, secureEndpoint ? 'HTTPS' : 'HTTP', req);
 			}
-			callback(proxy);
+			callback(proxy, 'system_cached');
 			log.debug('ProxyResolver#resolveProxy cached', url, proxy, stackText);
 			return;
 		}
@@ -253,7 +282,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 						collectResult(results, proxy, secureEndpoint ? 'HTTPS' : 'HTTP', req);
 					}
 				}
-				callback(proxy);
+				callback(proxy, 'system');
 				log.debug('ProxyResolver#resolveProxy', url, proxy, stackText);
 			}).then(() => {
 				count++;
@@ -261,7 +290,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			}, err => {
 				errorCount++;
 				const fallback: string | undefined = cache.values().next().value; // fall back to any proxy (https://github.com/microsoft/vscode/issues/122825)
-				callback(fallback);
+				callback(fallback, 'fallback');
 				log.error('ProxyResolver#resolveProxy', fallback, toErrorMessage(err), stackText);
 			});
 	}
@@ -272,6 +301,16 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			useProxySettings(url, undefined, '', result => {
 				try {
 					resolve(getProxyURLFromResolverResult(result).url);
+				} catch (err) {
+					reject(err);
+				}
+			});
+		}),
+		resolveProxyByURL: (url: string) => new Promise<ResolvedProxyInfo>((resolve, reject) => {
+			useProxySettings(url, undefined, '', (result, source) => {
+				try {
+					const { url: proxyURL, type } = getProxyURLFromResolverResult(result);
+					resolve({ url: proxyURL, type, source });
 				} catch (err) {
 					reject(err);
 				}
