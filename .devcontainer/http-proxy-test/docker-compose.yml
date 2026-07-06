@@ -1,0 +1,23 @@
+version: '3.4'
+
+services:
+    devcontainer:
+        image: mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm
+        volumes:
+            - ../../..:/workspaces
+        ports:
+            - "127.0.0.1:4444:4444"
+    http-proxy-1:
+        restart: always
+        build:
+            context: http-proxy
+            dockerfile: Dockerfile
+        ports:
+            - "127.0.0.1:3144:3128"
+    http-proxy-2:
+        restart: always
+        build:
+            context: http-proxy
+            dockerfile: Dockerfile
+        ports:
+            - "127.0.0.1:3155:3128"

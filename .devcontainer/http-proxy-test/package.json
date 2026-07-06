@@ -1,0 +1,7 @@
+{
+	"scripts": {
+		"pac-server:run": "node pac-server.js",
+		"proxy-1:access-log": "while true; do docker exec -it http-proxy-test-http-proxy-1-1 tail -F /var/log/squid/access.log ; sleep 1 ; done",
+		"proxy-2:access-log": "while true; do docker exec -it http-proxy-test-http-proxy-2-1 tail -F /var/log/squid/access.log ; sleep 1 ; done"
+	}
+}
