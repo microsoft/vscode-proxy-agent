@@ -54,6 +54,33 @@ const maxCacheEntries = 5000; // Cache can grow twice that much due to 'oldCache
 
 export type LookupProxyAuthorization = (proxyURL: string, proxyAuthenticate: string | string[] | undefined, state: Record<string, any>) => Promise<string | undefined>;
 
+export interface ProxyAuthorizationInfo {
+	scheme: 'basic';
+	host: string;
+	port: number;
+	realm: string;
+	isProxy: true;
+	attempt: number;
+}
+
+export interface ProxyAuthorizationCredentials {
+	username: string;
+	password: string;
+}
+
+export interface ProxyAuthorizationLookupParams {
+	log: Log;
+	lookupKerberosAuthorization?(proxyURL: string): Promise<string | undefined>;
+	lookupAuthorization?(authInfo: ProxyAuthorizationInfo): Promise<ProxyAuthorizationCredentials | undefined>;
+	onDidRequestAuthentication?(authenticationTypes: string[]): void;
+}
+
+interface ProxyAuthorizationState {
+	kerberosRequested?: boolean;
+	basicAuthCacheUsed?: boolean;
+	basicAuthAttempt?: number;
+}
+
 export interface Log {
 	trace(message: string, ...args: any[]): void;
 	debug(message: string, ...args: any[]): void;
@@ -80,6 +107,75 @@ export interface ProxyAgentParams {
 	isUseHostProxyEnabled: () => boolean;
 	getNetworkInterfaceCheckInterval?: () => number;
 	env: NodeJS.ProcessEnv;
+}
+
+export function createProxyAuthorizationLookup(params: ProxyAuthorizationLookupParams): LookupProxyAuthorization {
+	const proxyAuthenticateCache: Record<string, string | string[] | undefined> = {};
+	const basicAuthCache: Record<string, string | undefined> = {};
+
+	return async (proxyURL, proxyAuthenticate, state: ProxyAuthorizationState): Promise<string | undefined> => {
+		proxyURL = proxyURL.replace(/\/+$/, '');
+		const cached = proxyAuthenticateCache[proxyURL];
+		if (proxyAuthenticate) {
+			proxyAuthenticateCache[proxyURL] = proxyAuthenticate;
+		}
+		params.log.trace('ProxyResolver#lookupProxyAuthorization callback', `proxyURL:${proxyURL}`, `proxyAuthenticate:${proxyAuthenticate}`, `proxyAuthenticateCache:${cached}`);
+		const header = proxyAuthenticate || cached;
+		const authenticate = Array.isArray(header) ? header : typeof header === 'string' ? [header] : [];
+		params.onDidRequestAuthentication?.(authenticate.map(value => value.split(' ')[0]));
+
+		if (params.lookupKerberosAuthorization && authenticate.some(value => /^(Negotiate|Kerberos)( |$)/i.test(value)) && !state.kerberosRequested) {
+			state.kerberosRequested = true;
+			try {
+				const authorization = await params.lookupKerberosAuthorization(proxyURL);
+				if (authorization) {
+					return authorization;
+				}
+			} catch (error) {
+				params.log.debug('ProxyResolver#lookupProxyAuthorization Kerberos authentication failed', error);
+			}
+		}
+
+		const basicAuthHeader = authenticate.find(value => /^Basic( |$)/i.test(value));
+		if (params.lookupAuthorization && basicAuthHeader) {
+			try {
+				const cachedAuth = basicAuthCache[proxyURL];
+				if (cachedAuth) {
+					if (state.basicAuthCacheUsed) {
+						params.log.debug('ProxyResolver#lookupProxyAuthorization Basic authentication deleting cached credentials', `proxyURL:${proxyURL}`);
+						delete basicAuthCache[proxyURL];
+					} else {
+						params.log.debug('ProxyResolver#lookupProxyAuthorization Basic authentication using cached credentials', `proxyURL:${proxyURL}`);
+						state.basicAuthCacheUsed = true;
+						return cachedAuth;
+					}
+				}
+
+				state.basicAuthAttempt = (state.basicAuthAttempt || 0) + 1;
+				const realm = / realm="([^"]+)"/i.exec(basicAuthHeader)?.[1];
+				params.log.debug('ProxyResolver#lookupProxyAuthorization Basic authentication lookup', `proxyURL:${proxyURL}`, `realm:${realm}`);
+				const url = new URL(proxyURL);
+				const credentials = await params.lookupAuthorization({
+					scheme: 'basic',
+					host: url.hostname,
+					port: Number(url.port),
+					realm: realm || '',
+					isProxy: true,
+					attempt: state.basicAuthAttempt,
+				});
+				if (credentials) {
+					params.log.debug('ProxyResolver#lookupProxyAuthorization Basic authentication received credentials', `proxyURL:${proxyURL}`, `realm:${realm}`);
+					const authorization = 'Basic ' + Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+					basicAuthCache[proxyURL] = authorization;
+					return authorization;
+				}
+				params.log.debug('ProxyResolver#lookupProxyAuthorization Basic authentication received no credentials', `proxyURL:${proxyURL}`, `realm:${realm}`);
+			} catch (error) {
+				params.log.error('ProxyResolver#lookupProxyAuthorization Basic authentication failed', error);
+			}
+		}
+		return undefined;
+	};
 }
 
 export type { ProxyResolveType } from './agent';

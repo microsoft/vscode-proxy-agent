@@ -11,12 +11,16 @@ resources:
     - repository: templates
       type: github
       name: microsoft/vscode-engineering
-      ref: main
+      ref: chrmarti/sheer-fly
       endpoint: Monaco
 
 parameters:
   - name: publishPackage
     displayName: 🚀 Publish vscode-proxy-agent
+    type: boolean
+    default: false
+  - name: publishPackageToAzureArtifacts
+    displayName: 🚀 Publish vscode-proxy-agent to Azure Artifacts
     type: boolean
     default: false
 
@@ -34,3 +38,8 @@ extends:
         
         testPlatforms: {}
         publishPackage: ${{ parameters.publishPackage }}
+        publishPackageToAzureArtifacts: ${{ parameters.publishPackageToAzureArtifacts }}
+        tag: next
+        ghCreateTag: false
+        ghCreateRelease: false
+        ghReleaseAddChangeLog: false
