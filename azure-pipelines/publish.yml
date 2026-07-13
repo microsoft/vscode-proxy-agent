@@ -16,7 +16,11 @@ resources:
 
 parameters:
   - name: publishPackage
-    displayName: 🚀 Publish vscode-proxy-agent
+    displayName: 🚀 Publish vscode-proxy-agent to npm
+    type: boolean
+    default: false
+  - name: publishPackageToAzureArtifacts
+    displayName: 🚀 Publish vscode-proxy-agent to Azure Artifacts
     type: boolean
     default: false
 
@@ -34,3 +38,4 @@ extends:
         
         testPlatforms: {}
         publishPackage: ${{ parameters.publishPackage }}
+        publishPackageToAzureArtifacts: ${{ parameters.publishPackageToAzureArtifacts }}
