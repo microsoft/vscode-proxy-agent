@@ -232,7 +232,8 @@ describe('Proxied client', function () {
 
 	it('should work with kerberos', function () {
 		this.timeout(10000);
-		const proxyAuthenticateCache = {};
+		const log = { ...console, trace: console.log };
+		const lookupProxyAuthorization = createKerberosProxyAuthorizationLookup(log);
 		return testRequest(https, {
 			hostname: 'test-https-server',
 			path: '/test-path',
@@ -242,8 +243,7 @@ describe('Proxied client', function () {
 					if (proxyAuthenticate) {
 						assert.strictEqual(proxyAuthenticate, 'Negotiate');
 					}
-					const log = { ...console, trace: console.log };
-					return lookupProxyAuthorization(log, log, proxyAuthenticateCache, true, proxyURL, proxyAuthenticate, state);
+					return lookupProxyAuthorization(proxyURL, proxyAuthenticate, state);
 				},
 			}),
 			ca,
@@ -252,7 +252,8 @@ describe('Proxied client', function () {
 	
 	it('should work with kerberos (fetch)', async function () {
 		this.timeout(10000);
-		const proxyAuthenticateCache = {};
+		const log = { ...console, trace: console.log };
+		const lookupProxyAuthorization = createKerberosProxyAuthorizationLookup(log);
 		const params: vpa.ProxyAgentParams = {
 			...directProxyAgentParamsV1,
 			resolveProxy: async () => 'PROXY test-http-kerberos-proxy:80',
@@ -261,8 +262,7 @@ describe('Proxied client', function () {
 				if (proxyAuthenticate) {
 					assert.strictEqual(proxyAuthenticate, 'Negotiate');
 				}
-				const log = { ...console, trace: console.log };
-				return lookupProxyAuthorization(log, log, proxyAuthenticateCache, true, proxyURL, proxyAuthenticate, state);
+				return lookupProxyAuthorization(proxyURL, proxyAuthenticate, state);
 			},
 		};
 		const { resolveProxyURL } = vpa.createProxyResolver(params);
@@ -496,65 +496,17 @@ describe('Proxied client', function () {
 	});
 });
 
-// From microsoft/vscode's proxyResolver.ts:
-async function lookupProxyAuthorization(
-	extHostLogService: Console,
-	mainThreadTelemetry: Console,
-	// configProvider: ExtHostConfigProvider,
-	proxyAuthenticateCache: Record<string, string | string[] | undefined>,
-	isRemote: boolean,
-	proxyURL: string,
-	proxyAuthenticate: string | string[] | undefined,
-	state: { kerberosRequested?: boolean }
-): Promise<string | undefined> {
-	const cached = proxyAuthenticateCache[proxyURL];
-	if (proxyAuthenticate) {
-		proxyAuthenticateCache[proxyURL] = proxyAuthenticate;
-	}
-	extHostLogService.trace('ProxyResolver#lookupProxyAuthorization callback', `proxyURL:${proxyURL}`, `proxyAuthenticate:${proxyAuthenticate}`, `proxyAuthenticateCache:${cached}`);
-	const header = proxyAuthenticate || cached;
-	const authenticate = Array.isArray(header) ? header : typeof header === 'string' ? [header] : [];
-	sendTelemetry(mainThreadTelemetry, authenticate, isRemote);
-	if (authenticate.some(a => /^(Negotiate|Kerberos)( |$)/i.test(a)) && !state.kerberosRequested) {
-		try {
-			state.kerberosRequested = true;
+function createKerberosProxyAuthorizationLookup(log: vpa.Log): vpa.LookupProxyAuthorization {
+	return vpa.createProxyAuthorizationLookup({
+		log,
+		lookupKerberosAuthorization: async proxyURL => {
 			const kerberos = await import('kerberos');
 			const url = new URL(proxyURL);
-			const spn = /* configProvider.getConfiguration('http').get<string>('proxyKerberosServicePrincipal')
-				|| */ (process.platform === 'win32' ? `HTTP/${url.hostname}` : `HTTP@${url.hostname}`);
-			extHostLogService.debug('ProxyResolver#lookupProxyAuthorization Kerberos authentication lookup', `proxyURL:${proxyURL}`, `spn:${spn}`);
+			const spn = process.platform === 'win32' ? `HTTP/${url.hostname}` : `HTTP@${url.hostname}`;
+			log.debug('ProxyResolver#lookupProxyAuthorization Kerberos authentication lookup', `proxyURL:${proxyURL}`, `spn:${spn}`);
 			const client = await kerberos.initializeClient(spn);
 			const response = await client.step('');
 			return 'Negotiate ' + response;
-		} catch (err) {
-			extHostLogService.error('ProxyResolver#lookupProxyAuthorization Kerberos authentication failed', err);
-		}
-	}
-	return undefined;
-}
-
-type ProxyAuthenticationClassification = {
-	owner: 'chrmarti';
-	comment: 'Data about proxy authentication requests';
-	authenticationType: { classification: 'PublicNonPersonalData'; purpose: 'FeatureInsight'; comment: 'Type of the authentication requested' };
-	extensionHostType: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Type of the extension host' };
-};
-
-type ProxyAuthenticationEvent = {
-	authenticationType: string;
-	extensionHostType: string;
-};
-
-let telemetrySent = false;
-
-function sendTelemetry(mainThreadTelemetry: Console, authenticate: string[], isRemote: boolean) {
-	if (telemetrySent || !authenticate.length) {
-		return;
-	}
-	telemetrySent = true;
-
-	mainThreadTelemetry.log('proxyAuthenticationRequest', {
-		authenticationType: authenticate.map(a => a.split(' ')[0]).join(','),
-		extensionHostType: isRemote ? 'remote' : 'local',
+		},
 	});
 }

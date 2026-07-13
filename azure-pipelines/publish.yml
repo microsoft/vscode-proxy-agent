@@ -11,7 +11,7 @@ resources:
     - repository: templates
       type: github
       name: microsoft/vscode-engineering
-      ref: main
+      ref: chrmarti/sheer-fly
       endpoint: Monaco
 
 parameters:
@@ -34,3 +34,7 @@ extends:
         
         testPlatforms: {}
         publishPackage: ${{ parameters.publishPackage }}
+        tag: next
+        ghCreateTag: false
+        ghCreateRelease: false
+        ghReleaseAddChangeLog: false
