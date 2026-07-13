@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.44.0]
+- Add `createProxyAuthorizationLookup` for reusable Kerberos and Basic proxy authentication handling.
+
 ## [0.43.0]
 - Add `resolveProxyByURL` to `createProxyResolver`, returning the resolved proxy `url`, `type` (`DIRECT`/`PROXY`/`HTTP`/`HTTPS`/`SOCKS`/`SOCKS5`/`SOCKS4`/`EMPTY`/`UNRECOGNIZED`) and `source` (`localhost`/`noProxyConfig`/`noProxyEnv`/`setting`/`env`/`remote`/`system_cached`/`system`/`fallback`). `getProxyURLFromResolverResult` now also returns the resolved `type`. The existing `resolveProxyURL` is unchanged.
 
