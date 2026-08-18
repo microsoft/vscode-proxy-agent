@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import { spawnSync } from 'child_process';
 import { createProxyResolver, LogLevel, ProxyAgentParams } from '../../src';
 
 function createParams(overrides: Partial<ProxyAgentParams>): ProxyAgentParams {
@@ -24,6 +25,46 @@ function createParams(overrides: Partial<ProxyAgentParams>): ProxyAgentParams {
 }
 
 describe('resolveProxyByURL', function () {
+	it('does not emit the legacy URL parser deprecation', async function () {
+		if (process.env['VSCODE_PROXY_AGENT_DEPRECATION_CHILD'] !== '1') {
+			const result = spawnSync(process.execPath, [
+				'--pending-deprecation',
+				require.resolve('mocha/bin/mocha'),
+				'--exit',
+				'-r',
+				'ts-node/register',
+				__filename,
+				'--grep',
+				'legacy URL parser',
+			], {
+				encoding: 'utf8',
+				env: {
+					...process.env,
+					TS_NODE_COMPILER_OPTIONS: JSON.stringify({ types: ['node', 'mocha'] }),
+					VSCODE_PROXY_AGENT_DEPRECATION_CHILD: '1',
+				},
+			});
+			assert.strictEqual(result.status, 0, result.stdout + result.stderr);
+			return;
+		}
+
+		const warnings: Error[] = [];
+		const onWarning = (warning: Error & { code?: string }) => {
+			if (warning.code === 'DEP0169') {
+				warnings.push(warning);
+			}
+		};
+		process.on('warning', onWarning);
+		try {
+			const { resolveProxyByURL } = createProxyResolver(createParams({}));
+			await resolveProxyByURL('https://example.com/path?query=value#fragment');
+			await new Promise<void>(resolve => setImmediate(resolve));
+		} finally {
+			process.off('warning', onWarning);
+		}
+		assert.deepStrictEqual(warnings, []);
+	});
+
 	it('reports localhost as a direct connection', async function () {
 		const { resolveProxyByURL } = createProxyResolver(createParams({}));
 		assert.deepStrictEqual(await resolveProxyByURL('http://localhost:3000/'), {
