@@ -242,9 +242,9 @@ export function createProxyResolver(params: ProxyAgentParams) {
 		}
 	}
 
-	function getCacheKey(url: nodeurl.UrlWithStringQuery) {
+	function getCacheKey(url: nodeurl.URL) {
 		// Expecting proxies to usually be the same per scheme://host:port. Assuming that for performance.
-		return nodeurl.format({ ...url, ...{ pathname: undefined, search: undefined, hash: undefined } });
+		return `${url.protocol}//${url.host}`;
 	}
 	function getCachedProxy(key: string) {
 		checkAndFlushCacheIfNetworkChanged();
@@ -304,7 +304,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 	}
 
 	function useProxySettings(url: string, req: http.ClientRequest | undefined, stackText: string, callback: (proxy: string | undefined, source: ProxyResolveSource) => void) {
-		const parsedUrl = nodeurl.parse(url); // Coming from Node's URL, sticking with that.
+		const parsedUrl = new nodeurl.URL(url);
 
 		const hostname = parsedUrl.hostname;
 		if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '::ffff:127.0.0.1') {
@@ -1463,5 +1463,4 @@ export function toLogString(args: any[]) {
 			return value;
 		})).join(', ')}]`;
 }
-
 
