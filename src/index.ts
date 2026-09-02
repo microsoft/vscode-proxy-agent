@@ -9,6 +9,7 @@ import type * as https from 'https';
 import * as tls from 'tls';
 import * as nodeurl from 'url';
 import * as os from 'os';
+import * as path from 'path';
 import * as fs from 'fs';
 import * as cp from 'child_process';
 import * as crypto from 'crypto';
@@ -1381,11 +1382,8 @@ async function readNodeSystemCertificates(log: Log): Promise<string[]> {
 		return await new Promise<string[]>((resolve, reject) => {
 			log.debug('ProxyResolver#loadSystemCertificates starting worker');
 			const workerStart = Date.now();
-			const worker = new Worker(`
-				const { parentPort } = require('worker_threads');
-				const tls = require('tls');
-				parentPort.postMessage(tls.getCACertificates('system'));
-			`, { eval: true, name: 'System certificate loader' });
+			const worker = new Worker(path.join(__dirname, 'systemCertificatesWorker.js'), { name: 'System certificate loader' });
+			worker.unref();
 			let settled = false;
 			worker.once('message', (certs: unknown) => {
 				settled = true;

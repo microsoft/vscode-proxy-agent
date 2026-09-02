@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { createProxyResolver, LogLevel, ProxyAgentParams, resetCaches } from '../../src';
+import { createProxyResolver, getOrLoadAdditionalCertificates, loadSystemCertificates, Log, LogLevel, ProxyAgentParams, resetCaches } from '../../src';
 
 function createParams(overrides: Partial<ProxyAgentParams>): ProxyAgentParams {
 	const noop = () => { };
@@ -30,18 +30,34 @@ describe('resolveProxyByURL', function () {
 		}
 
 		resetCaches();
-		let resolveLoaded: (() => void) | undefined;
-		const loaded = new Promise<void>(resolve => resolveLoaded = resolve);
-		try {
-			createProxyResolver(createParams({
-				addCertificatesV1: () => true,
+		const debugMessages: string[] = [];
+		const log: Log = {
+			trace: () => { },
+			debug: message => debugMessages.push(message),
+			info: () => { },
+			warn: () => { },
+			error: () => { },
+		};
+		const params = createParams({
+			addCertificatesV1: () => true,
+			loadSystemCertificatesFromNode: () => true,
+			loadAdditionalCertificates: () => loadSystemCertificates({
 				loadSystemCertificatesFromNode: () => true,
-				loadAdditionalCertificates: async () => {
-					resolveLoaded?.();
-					return [];
-				},
-			}));
-			await loaded;
+				log,
+			}),
+			log,
+		});
+		try {
+			createProxyResolver(params);
+			const startedDuringResolverCreation = debugMessages.includes('ProxyResolver#loadSystemCertificates starting worker');
+			await getOrLoadAdditionalCertificates(params);
+			assert.deepStrictEqual({
+				startedDuringResolverCreation,
+				finishedLoadingSystemCertificates: debugMessages.some(message => message.startsWith('ProxyResolver#loadSystemCertificates from Node.js count')),
+			}, {
+				startedDuringResolverCreation: true,
+				finishedLoadingSystemCertificates: true,
+			});
 		} finally {
 			resetCaches();
 		}
