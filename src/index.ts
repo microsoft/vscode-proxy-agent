@@ -1379,6 +1379,7 @@ async function readNodeSystemCertificates(log: Log): Promise<string[]> {
 
 	try {
 		return await new Promise<string[]>((resolve, reject) => {
+			log.debug('ProxyResolver#loadSystemCertificates starting worker');
 			const worker = new Worker(`
 				const { parentPort } = require('worker_threads');
 				const tls = require('tls');
