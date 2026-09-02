@@ -14,6 +14,7 @@ import * as cp from 'child_process';
 import * as crypto from 'crypto';
 import * as undici from 'undici';
 import * as stream from 'stream';
+import { Worker } from 'worker_threads';
 
 import { createPacProxyAgent, getProxyURLFromResolverResult, PacProxyAgent, ProxyResolveType } from './agent';
 import type { IncomingHttpHeaders } from 'undici/types/header';
@@ -209,6 +210,10 @@ export interface ResolvedProxyInfo {
 
 export function createProxyResolver(params: ProxyAgentParams) {
 	const { getProxyURL, log, proxyResolveTelemetry: proxyResolverTelemetry, env } = params;
+	if (process.platform === 'darwin' && params.loadSystemCertificatesFromNode() && (params.addCertificatesV1() || params.addCertificatesV2())) {
+		void getOrLoadAdditionalCertificates(params)
+			.catch(err => log.error('ProxyResolver#loadSystemCertificates preload error', toErrorMessage(err)));
+	}
 	let envProxy = proxyFromConfigURL(env.https_proxy || env.HTTPS_PROXY || env.http_proxy || env.HTTP_PROXY); // Not standardized.
 
 	let envNoProxy = noProxyFromEnv(env.no_proxy || env.NO_PROXY); // Not standardized.
@@ -1296,6 +1301,11 @@ export async function getOrLoadAdditionalCertificates(params: ProxyAgentParams) 
 			result: undefined
 		};
 		_certs.set(loadFromNode, cert);
+		void cert.promise.catch(() => {
+			if (_certs.get(loadFromNode) === cert) {
+				_certs.delete(loadFromNode);
+			}
+		});
 	}
 	return _certs.get(loadFromNode)!.promise;
 }
@@ -1322,33 +1332,86 @@ function filterExpiredCertificates(params: CertificateParams, certs: string[]) {
 	return filtered;
 }
 
-let _systemCertificatesPromise: Promise<string[]> | undefined;
-export async function loadSystemCertificates(params: CertificateParams) {
-	if (!!params.loadSystemCertificatesFromNode?.()) { // Checking if function exists for backward compatibility.
-		const start = Date.now();
-		const systemCerts = tls.getCACertificates('system');
-		params.log.debug(`ProxyResolver#loadSystemCertificates from Node.js count (${Date.now() - start}ms)`, systemCerts.length);
-		return filterExpiredCertificates(params, systemCerts);
-	}
-	if (!_systemCertificatesPromise) {
-		_systemCertificatesPromise = (async () => {
-			try {
+const _systemCertificatesPromises = new Map<boolean, Promise<string[]>>();
+export function loadSystemCertificates(params: CertificateParams) {
+	const loadFromNode = !!params.loadSystemCertificatesFromNode?.(); // Checking if function exists for backward compatibility.
+	let systemCertificatesPromise = _systemCertificatesPromises.get(loadFromNode);
+	if (!systemCertificatesPromise) {
+		if (loadFromNode) {
+			systemCertificatesPromise = (async () => {
 				const start = Date.now();
-				const certs = await readSystemCertificates();
-				params.log.debug(`ProxyResolver#loadSystemCertificates count (${Date.now() - start}ms)`, certs.length);
+				const certs = await readNodeSystemCertificates(params.log);
+				params.log.debug(`ProxyResolver#loadSystemCertificates from Node.js count (${Date.now() - start}ms)`, certs.length);
 				return filterExpiredCertificates(params, certs);
-			} catch (err) {
-				params.log.error('ProxyResolver#loadSystemCertificates error', toErrorMessage(err));
-				return [];
+			})();
+		} else {
+			systemCertificatesPromise = (async () => {
+				try {
+					const start = Date.now();
+					const certs = await readSystemCertificates();
+					params.log.debug(`ProxyResolver#loadSystemCertificates count (${Date.now() - start}ms)`, certs.length);
+					return filterExpiredCertificates(params, certs);
+				} catch (err) {
+					params.log.error('ProxyResolver#loadSystemCertificates error', toErrorMessage(err));
+					return [];
+				}
+			})();
+		}
+		_systemCertificatesPromises.set(loadFromNode, systemCertificatesPromise);
+		void systemCertificatesPromise.catch(() => {
+			if (_systemCertificatesPromises.get(loadFromNode) === systemCertificatesPromise) {
+				_systemCertificatesPromises.delete(loadFromNode);
 			}
-		})();
+		});
 	}
-	return _systemCertificatesPromise;
+	return systemCertificatesPromise;
 }
 
 export function resetCaches() {
 	_certs.clear();
-	_systemCertificatesPromise = undefined;
+	_systemCertificatesPromises.clear();
+}
+
+async function readNodeSystemCertificates(log: Log): Promise<string[]> {
+	if (process.platform !== 'darwin') {
+		return tls.getCACertificates('system');
+	}
+
+	try {
+		return await new Promise<string[]>((resolve, reject) => {
+			const worker = new Worker(`
+				const { parentPort } = require('worker_threads');
+				const tls = require('tls');
+				parentPort.postMessage(tls.getCACertificates('system'));
+			`, { eval: true, name: 'System certificate loader' });
+			let settled = false;
+			worker.once('message', (certs: unknown) => {
+				settled = true;
+				if (!isStringArray(certs)) {
+					void worker.terminate();
+					reject(new Error('System certificate worker returned an invalid result'));
+					return;
+				}
+				resolve(certs);
+			});
+			worker.once('error', err => {
+				settled = true;
+				reject(err);
+			});
+			worker.once('exit', code => {
+				if (!settled) {
+					reject(new Error(`System certificate worker exited with code ${code}`));
+				}
+			});
+		});
+	} catch (err) {
+		log.warn('ProxyResolver#loadSystemCertificates worker failed, falling back to main thread', toErrorMessage(err));
+		return tls.getCACertificates('system');
+	}
+}
+
+function isStringArray(value: unknown): value is string[] {
+	return Array.isArray(value) && value.every(item => typeof item === 'string');
 }
 
 async function readSystemCertificates(): Promise<string[]> {
@@ -1463,5 +1526,3 @@ export function toLogString(args: any[]) {
 			return value;
 		})).join(', ')}]`;
 }
-
-

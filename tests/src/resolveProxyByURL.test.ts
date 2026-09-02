@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { createProxyResolver, LogLevel, ProxyAgentParams } from '../../src';
+import { createProxyResolver, LogLevel, ProxyAgentParams, resetCaches } from '../../src';
 
 function createParams(overrides: Partial<ProxyAgentParams>): ProxyAgentParams {
 	const noop = () => { };
@@ -24,6 +24,29 @@ function createParams(overrides: Partial<ProxyAgentParams>): ProxyAgentParams {
 }
 
 describe('resolveProxyByURL', function () {
+	it('preloads Node.js system certificates on macOS', async function () {
+		if (process.platform !== 'darwin') {
+			this.skip();
+		}
+
+		resetCaches();
+		let resolveLoaded: (() => void) | undefined;
+		const loaded = new Promise<void>(resolve => resolveLoaded = resolve);
+		try {
+			createProxyResolver(createParams({
+				addCertificatesV1: () => true,
+				loadSystemCertificatesFromNode: () => true,
+				loadAdditionalCertificates: async () => {
+					resolveLoaded?.();
+					return [];
+				},
+			}));
+			await loaded;
+		} finally {
+			resetCaches();
+		}
+	});
+
 	it('reports localhost as a direct connection', async function () {
 		const { resolveProxyByURL } = createProxyResolver(createParams({}));
 		assert.deepStrictEqual(await resolveProxyByURL('http://localhost:3000/'), {
