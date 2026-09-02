@@ -1380,6 +1380,7 @@ async function readNodeSystemCertificates(log: Log): Promise<string[]> {
 	try {
 		return await new Promise<string[]>((resolve, reject) => {
 			log.debug('ProxyResolver#loadSystemCertificates starting worker');
+			const workerStart = Date.now();
 			const worker = new Worker(`
 				const { parentPort } = require('worker_threads');
 				const tls = require('tls');
@@ -1400,6 +1401,7 @@ async function readNodeSystemCertificates(log: Log): Promise<string[]> {
 				reject(err);
 			});
 			worker.once('exit', code => {
+				log.debug(`ProxyResolver#loadSystemCertificates worker exited (${Date.now() - workerStart}ms)`, code);
 				if (!settled) {
 					reject(new Error(`System certificate worker exited with code ${code}`));
 				}
