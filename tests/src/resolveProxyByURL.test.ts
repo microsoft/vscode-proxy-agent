@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { createProxyResolver, LogLevel, ProxyAgentParams } from '../../src';
+import { createProxyResolver, getOrLoadAdditionalCertificates, loadSystemCertificates, Log, LogLevel, ProxyAgentParams, resetCaches } from '../../src';
 
 function createParams(overrides: Partial<ProxyAgentParams>): ProxyAgentParams {
 	const noop = () => { };
@@ -24,6 +24,45 @@ function createParams(overrides: Partial<ProxyAgentParams>): ProxyAgentParams {
 }
 
 describe('resolveProxyByURL', function () {
+	it('preloads Node.js system certificates on macOS', async function () {
+		if (process.platform !== 'darwin') {
+			this.skip();
+		}
+
+		resetCaches();
+		const debugMessages: string[] = [];
+		const log: Log = {
+			trace: () => { },
+			debug: message => debugMessages.push(message),
+			info: () => { },
+			warn: () => { },
+			error: () => { },
+		};
+		const params = createParams({
+			addCertificatesV1: () => true,
+			loadSystemCertificatesFromNode: () => true,
+			loadAdditionalCertificates: () => loadSystemCertificates({
+				loadSystemCertificatesFromNode: () => true,
+				log,
+			}),
+			log,
+		});
+		try {
+			createProxyResolver(params);
+			const startedDuringResolverCreation = debugMessages.includes('ProxyResolver#loadSystemCertificates starting worker');
+			await getOrLoadAdditionalCertificates(params);
+			assert.deepStrictEqual({
+				startedDuringResolverCreation,
+				finishedLoadingSystemCertificates: debugMessages.some(message => message.startsWith('ProxyResolver#loadSystemCertificates from Node.js count')),
+			}, {
+				startedDuringResolverCreation: true,
+				finishedLoadingSystemCertificates: true,
+			});
+		} finally {
+			resetCaches();
+		}
+	});
+
 	it('reports localhost as a direct connection', async function () {
 		const { resolveProxyByURL } = createProxyResolver(createParams({}));
 		assert.deepStrictEqual(await resolveProxyByURL('http://localhost:3000/'), {

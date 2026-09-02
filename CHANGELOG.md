@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.45.0]
+- Load Node.js system certificates in a worker on macOS to avoid blocking the main thread ([microsoft/vscode#333830](https://github.com/microsoft/vscode/issues/333830))
+
 ## [0.44.0]
 - Add `createProxyAuthorizationLookup` for reusable Kerberos and Basic proxy authentication handling.
 
