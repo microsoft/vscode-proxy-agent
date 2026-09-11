@@ -891,7 +891,8 @@ function createProxyAgent(
 		uri: proxyURL,
 		allowH2,
 		requestTls: requestCA ? { allowH2, ca: requestCA } : { allowH2 },
-		proxyTls: proxyCA ? { allowH2, ca: proxyCA } : { allowH2 },
+		// Supplying proxyTls also enables TLS to SOCKS proxies in undici.
+		proxyTls: new URL(proxyURL).protocol === 'https:' ? { allowH2, ca: proxyCA } : undefined,
 		clientFactory: (origin: URL, opts: object): undici.Dispatcher => (new undici.Pool(origin, opts) as any).compose((dispatch: undici.Dispatcher['dispatch']) => {
 			class ProxyAuthHandler extends undici.DecoratorHandler {
 				private connectResponseHeaders?: IncomingHttpHeaders;

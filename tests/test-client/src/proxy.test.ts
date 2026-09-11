@@ -29,13 +29,19 @@ describe('Proxied client', function () {
 		});
 	});
 
-	it('should use HTTPS proxy for HTTPS connection (fetch)', async function () {
-		const { resolveProxyURL } = vpa.createProxyResolver(tlsProxiedProxyAgentParamsV1);
-		const patchedFetch = vpa.createFetchPatch(tlsProxiedProxyAgentParamsV1, globalThis.fetch, resolveProxyURL);
-		const res = await patchedFetch('https://test-https-server/test-path');
-		assert.strictEqual(res.status, 200);
-		assert.strictEqual((await res.json()).status, 'OK!');
-	});
+	for (const scheme of ['https:', 'HTTPS:']) {
+		it(`should use a ${scheme} proxy for HTTPS connection (fetch)`, async function () {
+			const { resolveProxyURL } = vpa.createProxyResolver(tlsProxiedProxyAgentParamsV1);
+			const patchedFetch = vpa.createFetchPatch(tlsProxiedProxyAgentParamsV1, globalThis.fetch, async url => {
+				const proxyURL = await resolveProxyURL(url);
+				assert.ok(proxyURL?.startsWith('https:'));
+				return proxyURL.replace(/^https:/, scheme);
+			});
+			const res = await patchedFetch('https://test-https-server/test-path');
+			assert.strictEqual(res.status, 200);
+			assert.strictEqual((await res.json()).status, 'OK!');
+		});
+	}
 
 	it('should support basic auth', function () {
 		return testRequest(https, {
