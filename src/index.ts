@@ -792,20 +792,20 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 			return originalFetch(input, init);
 		}
 		const systemCA = addCerts ? [...tls.rootCertificates, ...await getOrLoadAdditionalCertificates(params)] : undefined;
-		const { allowH2 } = agentOptions;
+		const { allowH2, timeouts } = agentOptions;
 		const requestCA = agentOptions.requestCA || systemCA;
 		const proxyCA = agentOptions.proxyCA || systemCA;
 		if (!proxyURL) {
 			const modifiedInit = {
 				...init,
-				dispatcher: withInterceptors(getAgent(agentOptions.dispatcher, allowH2, requestCA, addCerts)),
+				dispatcher: withInterceptors(getAgent(agentOptions.dispatcher, allowH2, requestCA, addCerts, timeouts)),
 			};
 			return originalFetch(input, modifiedInit);
 		}
 
 		const modifiedInit = {
 			...init,
-			dispatcher: withInterceptors(getProxyAgent(params, agentOptions.dispatcher, proxyURL, allowH2, requestCA, proxyCA, addCerts)),
+			dispatcher: withInterceptors(getProxyAgent(params, agentOptions.dispatcher, proxyURL, allowH2, requestCA, proxyCA, addCerts, timeouts)),
 		};
 		return originalFetch(input, modifiedInit);
 	};
@@ -814,7 +814,7 @@ export function createFetchPatch(params: ProxyAgentParams, originalFetch: typeof
 let previousAddCertsAgent: boolean | undefined = undefined;
 let defaultAgent: undici.Agent | undefined = undefined;
 let agentCache = new WeakMap<undici.Dispatcher, undici.Agent>();
-function getAgent(originalDispatcher: undici.Dispatcher | undefined, allowH2: boolean | undefined, requestCA: string | Buffer | (string | Buffer)[] | undefined, currentAddCerts: boolean): undici.Agent | undefined {
+function getAgent(originalDispatcher: undici.Dispatcher | undefined, allowH2: boolean | undefined, requestCA: string | Buffer | (string | Buffer)[] | undefined, currentAddCerts: boolean, timeouts: AgentTimeouts): undici.Agent | undefined {
 	if (previousAddCertsAgent !== currentAddCerts) {
 		previousAddCertsAgent = currentAddCerts;
 		defaultAgent = undefined;
@@ -822,21 +822,23 @@ function getAgent(originalDispatcher: undici.Dispatcher | undefined, allowH2: bo
 	}
 	if (!originalDispatcher) {
 		if (!defaultAgent) {
-			defaultAgent = createAgent(allowH2, requestCA);
+			defaultAgent = createAgent(allowH2, requestCA, timeouts);
 		}
 		return defaultAgent;
 	}
 
 	if (!agentCache.has(originalDispatcher)) {
-		agentCache.set(originalDispatcher, createAgent(allowH2, requestCA));
+		agentCache.set(originalDispatcher, createAgent(allowH2, requestCA, timeouts));
 	}
 	return agentCache.get(originalDispatcher);
 }
 
-function createAgent(allowH2: boolean | undefined, requestCA: string | Buffer | (string | Buffer)[] | undefined) {
+function createAgent(allowH2: boolean | undefined, requestCA: string | Buffer | (string | Buffer)[] | undefined, timeouts: AgentTimeouts) {
 	return new undici.Agent({
 		allowH2,
 		connect: { ca: requestCA },
+		headersTimeout: timeouts.headersTimeout,
+		bodyTimeout: timeouts.bodyTimeout,
 	});
 }
 
@@ -852,6 +854,7 @@ function getProxyAgent(
 	requestCA: string | Buffer | (string | Buffer)[] | undefined,
 	proxyCA: string | Buffer | (string | Buffer)[] | undefined,
 	currentAddCerts: boolean,
+	timeouts: AgentTimeouts,
 ): undici.ProxyAgent {
 	const shouldClearCache = previousAddCertsProxyAgent !== currentAddCerts || previousLookupProxyAuthorization !== params.lookupProxyAuthorization;
 	if (shouldClearCache) {
@@ -863,7 +866,7 @@ function getProxyAgent(
 
 	if (!originalDispatcher) {
 		if (!defaultProxyAgents.has(proxyURL)) {
-			defaultProxyAgents.set(proxyURL, createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA));
+			defaultProxyAgents.set(proxyURL, createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA, timeouts));
 		}
 		return defaultProxyAgents.get(proxyURL)!;
 	}
@@ -875,7 +878,7 @@ function getProxyAgent(
 	}
 
 	if (!dispatcherCache.has(proxyURL)) {
-		dispatcherCache.set(proxyURL, createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA));
+		dispatcherCache.set(proxyURL, createProxyAgent(params, proxyURL, allowH2, requestCA, proxyCA, timeouts));
 	}
 	return dispatcherCache.get(proxyURL)!;
 }
@@ -886,10 +889,13 @@ function createProxyAgent(
 	allowH2: boolean | undefined,
 	requestCA: string | Buffer | (string | Buffer)[] | undefined,
 	proxyCA: string | Buffer | (string | Buffer)[] | undefined,
+	timeouts: AgentTimeouts,
 ): undici.ProxyAgent {
 	return new undici.ProxyAgent({
 		uri: proxyURL,
 		allowH2,
+		headersTimeout: timeouts.headersTimeout,
+		bodyTimeout: timeouts.bodyTimeout,
 		requestTls: requestCA ? { allowH2, ca: requestCA } : { allowH2 },
 		proxyTls: proxyCA ? { allowH2, ca: proxyCA } : { allowH2 },
 		clientFactory: (origin: URL, opts: object): undici.Dispatcher => (new undici.Pool(origin, opts) as any).compose((dispatch: undici.Dispatcher['dispatch']) => {
@@ -1104,9 +1110,9 @@ class ProxyDispatcher extends undici.Dispatcher {
 				const proxyCA = callerOptions.proxyCA || systemCA;
 				let dispatcher: undici.Dispatcher;
 				if (proxyURL) {
-					dispatcher = getProxyAgent(this.params, this.originalDispatcher, proxyURL, callerOptions.allowH2, requestCA, proxyCA, this.addCerts);
+					dispatcher = getProxyAgent(this.params, this.originalDispatcher, proxyURL, callerOptions.allowH2, requestCA, proxyCA, this.addCerts, callerOptions.timeouts);
 				} else if (this.addCerts) {
-					dispatcher = getAgent(this.originalDispatcher, callerOptions.allowH2, requestCA, this.addCerts)!;
+					dispatcher = getAgent(this.originalDispatcher, callerOptions.allowH2, requestCA, this.addCerts, callerOptions.timeouts)!;
 				} else if (this.originalDispatcher) {
 					dispatcher = this.originalDispatcher;
 				} else {
@@ -1232,6 +1238,8 @@ function getAgentOptions(requestInit: RequestInit | undefined) {
 	let requestCA: string | Buffer | Array<string | Buffer> | undefined;
 	let proxyCA: string | Buffer | Array<string | Buffer> | undefined;
 	let socketPath: string | undefined;
+	let headersTimeout: number | undefined;
+	let bodyTimeout: number | undefined;
 	const dispatcher: undici.Dispatcher = (requestInit as any)?.dispatcher;
 	let originalAgentOptions: undici.Agent.Options | undefined = dispatcher && (dispatcher as any)[agentOptions];
 	if (dispatcher && !originalAgentOptions) {
@@ -1243,6 +1251,8 @@ function getAgentOptions(requestInit: RequestInit | undefined) {
 	}
 	if (originalAgentOptions && typeof originalAgentOptions === 'object') {
 		allowH2 = originalAgentOptions.allowH2;
+		headersTimeout = originalAgentOptions.headersTimeout;
+		bodyTimeout = originalAgentOptions.bodyTimeout;
 		if (originalAgentOptions.connect && typeof originalAgentOptions.connect === 'object') {
 			requestCA = 'ca' in originalAgentOptions.connect && originalAgentOptions.connect.ca || undefined;
 			socketPath = originalAgentOptions.connect.socketPath || undefined;
@@ -1264,10 +1274,21 @@ function getAgentOptions(requestInit: RequestInit | undefined) {
 	}
 	if (originalProxyAgentOptions && typeof originalProxyAgentOptions === 'object') {
 		allowH2 = originalProxyAgentOptions.allowH2;
+		headersTimeout = originalProxyAgentOptions.headersTimeout;
+		bodyTimeout = originalProxyAgentOptions.bodyTimeout;
 		requestCA = originalProxyAgentOptions.requestTls && 'ca' in originalProxyAgentOptions.requestTls && originalProxyAgentOptions.requestTls.ca || undefined;
 		proxyCA = originalProxyAgentOptions.proxyTls && 'ca' in originalProxyAgentOptions.proxyTls && originalProxyAgentOptions.proxyTls.ca || undefined;
 	}
-	return { dispatcher, allowH2, requestCA, proxyCA, socketPath };
+	return { dispatcher, allowH2, requestCA, proxyCA, socketPath, timeouts: { headersTimeout, bodyTimeout } };
+}
+
+/**
+ * The caller's idle clocks. undici defaults both to 300 s, which cuts off long-running streams (an LLM reasoning
+ * for minutes between chunks); the caller raised them on its dispatcher, so the replacement dispatcher keeps them.
+ */
+interface AgentTimeouts {
+	headersTimeout: number | undefined;
+	bodyTimeout: number | undefined;
 }
 
 function addCertificatesToOptionsV1(params: ProxyAgentParams, addCertificatesV1: boolean, opts: http.RequestOptions | tls.ConnectionOptions, callback: () => void, testCertificates?: (string | Buffer)[]) {
