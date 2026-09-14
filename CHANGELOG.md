@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [Unreleased]
+- Keep a caller's `headersTimeout` and `bodyTimeout` when the fetch patch replaces its dispatcher, so long-running streams can outlive undici's 300 s idle defaults ([Vivswan/litellm-vscode-chat#343](https://github.com/Vivswan/litellm-vscode-chat/issues/343))
+
 ## [0.45.0]
 - Load Node.js system certificates in a worker on macOS to avoid blocking the main thread ([microsoft/vscode#333830](https://github.com/microsoft/vscode/issues/333830))
 
