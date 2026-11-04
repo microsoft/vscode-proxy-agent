@@ -209,10 +209,19 @@ export interface ResolvedProxyInfo {
 	source: ProxyResolveSource;
 	/**
 	 * The full PAC-style result, such as `PROXY proxy1:8080; PROXY proxy2:8080; DIRECT`, of which `url` and `type`
-	 * describe the first entry they recognize. Unlike `url`, it keeps the fallback entries. `undefined` when the system
-	 * resolver returned nothing. A proxy from the `http.proxy` setting or an environment variable keeps its credentials.
+	 * describe the first entry they recognize. Unlike `url`, it keeps the fallback entries but no credentials: like
+	 * Electron's `session.resolveProxy`, it omits the userinfo of a proxy from the `http.proxy` setting or an environment
+	 * variable. `undefined` when the system resolver returned nothing.
 	 */
 	result: string | undefined;
+}
+
+/**
+ * Removes the credentials (userinfo) from the entries of a PAC-style proxy resolver result.
+ * E.g., "PROXY user:pass@host:8080; DIRECT" → "PROXY host:8080; DIRECT"
+ */
+function removeProxyResultCredentials(result: string | undefined): string | undefined {
+	return result?.replace(/(\b(?:PROXY|HTTPS?|SOCKS[45]?)\s+)[^\s;]*@/gi, '$1');
 }
 
 export function createProxyResolver(params: ProxyAgentParams) {
@@ -418,7 +427,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			useProxySettings(url, undefined, '', (result, source) => {
 				try {
 					const { url: proxyURL, type } = getProxyURLFromResolverResult(result);
-					resolve({ url: proxyURL, type, source, result });
+					resolve({ url: proxyURL, type, source, result: removeProxyResultCredentials(result) });
 				} catch (err) {
 					reject(err);
 				}

@@ -171,6 +171,27 @@ describe('resolveProxyByURL', function () {
 			{ url: 'http://proxy1.example.com:8080', type: 'PROXY', source: 'system_cached', result },
 		]);
 	});
+	it('omits credentials from the result, but not from the url', async function () {
+		const setting = createProxyResolver(createParams({
+			getProxyURL: () => 'http://user:pass@proxy.example.com:8080',
+		}));
+		const env = createProxyResolver(createParams({
+			env: { https_proxy: 'https://jane%40corp.example.com:p@ss@envproxy.example.com:3128' },
+		}));
+		const system = createProxyResolver(createParams({
+			resolveProxy: async () => 'PROXY user@proxy1.example.com:8080; HTTPS proxy2.example.com:8443; DIRECT',
+		}));
+		assert.deepStrictEqual([
+			await setting.resolveProxyByURL('https://example.com/'),
+			await env.resolveProxyByURL('https://example.com/'),
+			await system.resolveProxyByURL('https://example.com/'),
+		], [
+			{ url: 'http://user:pass@proxy.example.com:8080', type: 'PROXY', source: 'setting', result: 'PROXY proxy.example.com:8080' },
+			{ url: 'https://jane%40corp.example.com:p@ss@envproxy.example.com:3128', type: 'HTTPS', source: 'env', result: 'HTTPS envproxy.example.com:3128' },
+			{ url: 'http://user@proxy1.example.com:8080', type: 'PROXY', source: 'system', result: 'PROXY proxy1.example.com:8080; HTTPS proxy2.example.com:8443; DIRECT' },
+		]);
+	});
+
 	it('reports remote when host proxy resolution is disabled', async function () {
 		const { resolveProxyByURL } = createProxyResolver(createParams({
 			isUseHostProxyEnabled: () => false,
