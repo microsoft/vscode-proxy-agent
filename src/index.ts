@@ -207,6 +207,42 @@ export interface ResolvedProxyInfo {
 	type: ProxyResolveType;
 	/** Which configuration determined the result. */
 	source: ProxyResolveSource;
+	/**
+	 * The full PAC-style result, such as `PROXY proxy1:8080; PROXY proxy2:8080; DIRECT`, of which `url` and `type`
+	 * describe the first entry they recognize. Unlike `url`, it keeps the fallback entries. A proxy from the `http.proxy`
+	 * setting or an environment variable appears as Electron's `session.resolveProxy` would return it: `PROXY`, `HTTPS`,
+	 * `SOCKS5` or `SOCKS` (SOCKSv4) with `host:port`, without credentials or a path, and with the scheme's default port
+	 * if it has none; a malformed one becomes `DIRECT`. `undefined` when the system resolver returned nothing.
+	 */
+	result: string | undefined;
+}
+
+/** The PAC entry types of {@link proxyFromConfigURL}, as Chromium formats them in PAC results. */
+const configProxyTypes = new Map<string, { readonly scheme: string; readonly pacType: string; readonly defaultPort: number }>([
+	['PROXY', { scheme: 'http', pacType: 'PROXY', defaultPort: 80 }],
+	['HTTPS', { scheme: 'https', pacType: 'HTTPS', defaultPort: 443 }],
+	['SOCKS', { scheme: 'socks', pacType: 'SOCKS5', defaultPort: 1080 }],
+	['SOCKS4', { scheme: 'socks', pacType: 'SOCKS', defaultPort: 1080 }],
+]);
+
+/**
+ * Formats the PAC entry of a proxy from the `http.proxy` setting or an environment variable, as {@link proxyFromConfigURL}
+ * returns it, as Electron's `session.resolveProxy` formats its results.
+ * E.g., "PROXY user:pass@Proxy:8080/" → "PROXY proxy:8080" and "SOCKS4 proxy" → "SOCKS proxy:1080"
+ */
+function toElectronProxyResult(configProxy: string): string {
+	const [type, target] = configProxy.split(/\s+/, 2);
+	const kind = configProxyTypes.get(type);
+	if (!kind || !target) {
+		return 'DIRECT';
+	}
+	try {
+		// Only the host and port are used, so credentials, a path, a query and a fragment are dropped.
+		const url = new URL(`${kind.scheme}://${target}`);
+		return url.hostname ? `${kind.pacType} ${url.hostname.toLowerCase()}:${url.port || kind.defaultPort}` : 'DIRECT';
+	} catch {
+		return 'DIRECT';
+	}
 }
 
 export function createProxyResolver(params: ProxyAgentParams) {
@@ -412,7 +448,8 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			useProxySettings(url, undefined, '', (result, source) => {
 				try {
 					const { url: proxyURL, type } = getProxyURLFromResolverResult(result);
-					resolve({ url: proxyURL, type, source });
+					const configured = result && (source === 'setting' || source === 'env');
+					resolve({ url: proxyURL, type, source, result: configured ? toElectronProxyResult(result) : result });
 				} catch (err) {
 					reject(err);
 				}

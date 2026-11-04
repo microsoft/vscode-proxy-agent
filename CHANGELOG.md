@@ -1,6 +1,9 @@
 # Change Log
 Notable changes will be documented here.
 
+## [0.46.0]
+- Add `result` to `resolveProxyByURL`'s result: the full PAC-style resolver result, which keeps the fallback entries that `url` and `type` omit (e.g., `PROXY proxy1:8080; PROXY proxy2:8080; DIRECT`). A proxy from the `http.proxy` setting or an environment variable appears as Electron's `session.resolveProxy` would return it: with `host:port`, the scheme's default port if it has none, and no credentials or path.
+
 ## [0.45.0]
 - Load Node.js system certificates in a worker on macOS to avoid blocking the main thread ([microsoft/vscode#333830](https://github.com/microsoft/vscode/issues/333830))
 

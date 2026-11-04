@@ -66,7 +66,7 @@ describe('resolveProxyByURL', function () {
 	it('reports localhost as a direct connection', async function () {
 		const { resolveProxyByURL } = createProxyResolver(createParams({}));
 		assert.deepStrictEqual(await resolveProxyByURL('http://localhost:3000/'), {
-			url: undefined, type: 'DIRECT', source: 'localhost',
+			url: undefined, type: 'DIRECT', source: 'localhost', result: 'DIRECT',
 		});
 	});
 
@@ -75,7 +75,7 @@ describe('resolveProxyByURL', function () {
 			getProxyURL: () => 'http://proxy.example.com:8080',
 		}));
 		assert.deepStrictEqual(await resolveProxyByURL('https://example.com/'), {
-			url: 'http://proxy.example.com:8080', type: 'PROXY', source: 'setting',
+			url: 'http://proxy.example.com:8080', type: 'PROXY', source: 'setting', result: 'PROXY proxy.example.com:8080',
 		});
 	});
 
@@ -84,7 +84,7 @@ describe('resolveProxyByURL', function () {
 			env: { https_proxy: 'https://envproxy.example.com:3128' },
 		}));
 		assert.deepStrictEqual(await resolveProxyByURL('https://example.com/'), {
-			url: 'https://envproxy.example.com:3128', type: 'HTTPS', source: 'env',
+			url: 'https://envproxy.example.com:3128', type: 'HTTPS', source: 'env', result: 'HTTPS envproxy.example.com:3128',
 		});
 	});
 
@@ -93,7 +93,7 @@ describe('resolveProxyByURL', function () {
 			env: { https_proxy: 'https://envproxy.example.com:3128', no_proxy: 'example.com' },
 		}));
 		assert.deepStrictEqual(await resolveProxyByURL('https://example.com/'), {
-			url: undefined, type: 'DIRECT', source: 'noProxyEnv',
+			url: undefined, type: 'DIRECT', source: 'noProxyEnv', result: 'DIRECT',
 		});
 	});
 
@@ -103,7 +103,7 @@ describe('resolveProxyByURL', function () {
 			getNoProxyConfig: () => ['example.com'],
 		}));
 		assert.deepStrictEqual(await resolveProxyByURL('https://example.com/'), {
-			url: undefined, type: 'DIRECT', source: 'noProxyConfig',
+			url: undefined, type: 'DIRECT', source: 'noProxyConfig', result: 'DIRECT',
 		});
 	});
 
@@ -112,7 +112,7 @@ describe('resolveProxyByURL', function () {
 			resolveProxy: async () => 'SOCKS socksproxy.example.com:1080',
 		}));
 		assert.deepStrictEqual(await resolveProxyByURL('https://example.com/'), {
-			url: 'socks://socksproxy.example.com:1080', type: 'SOCKS', source: 'system',
+			url: 'socks://socksproxy.example.com:1080', type: 'SOCKS', source: 'system', result: 'SOCKS socksproxy.example.com:1080',
 		});
 	});
 
@@ -121,13 +121,13 @@ describe('resolveProxyByURL', function () {
 			resolveProxy: async () => 'SOCKS5 socksproxy.example.com:1080',
 		}));
 		assert.deepStrictEqual(await socks5.resolveProxyByURL('https://example.com/'), {
-			url: 'socks://socksproxy.example.com:1080', type: 'SOCKS5', source: 'system',
+			url: 'socks://socksproxy.example.com:1080', type: 'SOCKS5', source: 'system', result: 'SOCKS5 socksproxy.example.com:1080',
 		});
 		const http = createProxyResolver(createParams({
 			resolveProxy: async () => 'HTTP proxy.example.com:8080',
 		}));
 		assert.deepStrictEqual(await http.resolveProxyByURL('https://example.com/'), {
-			url: 'http://proxy.example.com:8080', type: 'HTTP', source: 'system',
+			url: 'http://proxy.example.com:8080', type: 'HTTP', source: 'system', result: 'HTTP proxy.example.com:8080',
 		});
 	});
 
@@ -136,7 +136,7 @@ describe('resolveProxyByURL', function () {
 			resolveProxy: async () => 'DIRECT',
 		}));
 		assert.deepStrictEqual(await resolveProxyByURL('https://example.com/'), {
-			url: undefined, type: 'DIRECT', source: 'system',
+			url: undefined, type: 'DIRECT', source: 'system', result: 'DIRECT',
 		});
 	});
 
@@ -145,7 +145,7 @@ describe('resolveProxyByURL', function () {
 			resolveProxy: async () => undefined,
 		}));
 		assert.deepStrictEqual(await resolveProxyByURL('https://example.com/'), {
-			url: undefined, type: 'EMPTY', source: 'system',
+			url: undefined, type: 'EMPTY', source: 'system', result: undefined,
 		});
 	});
 
@@ -154,16 +154,68 @@ describe('resolveProxyByURL', function () {
 			resolveProxy: async () => 'BOGUS proxy.example.com:9999',
 		}));
 		assert.deepStrictEqual(await resolveProxyByURL('https://example.com/'), {
-			url: undefined, type: 'UNRECOGNIZED', source: 'system',
+			url: undefined, type: 'UNRECOGNIZED', source: 'system', result: 'BOGUS proxy.example.com:9999',
 		});
 	});
 
+	it('keeps the fallback entries of a system result', async function () {
+		const result = 'PROXY proxy1.example.com:8080; HTTPS proxy2.example.com:8443; DIRECT';
+		const { resolveProxyByURL } = createProxyResolver(createParams({
+			resolveProxy: async () => result,
+		}));
+		assert.deepStrictEqual([
+			await resolveProxyByURL('https://example.com/'),
+			await resolveProxyByURL('https://example.com/other'),
+		], [
+			{ url: 'http://proxy1.example.com:8080', type: 'PROXY', source: 'system', result },
+			{ url: 'http://proxy1.example.com:8080', type: 'PROXY', source: 'system_cached', result },
+		]);
+	});
+	it('formats proxies from the http.proxy setting as Electron does in the result', async function () {
+		const resolve = async (proxyURL: string) => {
+			const { url, result } = await createProxyResolver(createParams({ getProxyURL: () => proxyURL })).resolveProxyByURL('https://example.com/');
+			return { url, result };
+		};
+		assert.deepStrictEqual({
+			credentials: await resolve('http://user:pass@Proxy.Example.com:8080/'),
+			defaultHttpPort: await resolve('http://proxy.example.com'),
+			defaultHttpsPort: await resolve('https://proxy.example.com/path?query#fragment'),
+			ipv6: await resolve('http://[::1]:3128'),
+			socks5: await resolve('socks5h://user@socks.example.com'),
+			socks4: await resolve('socks4://socks.example.com:1081'),
+			malformed: await resolve('http://proxy.example.com:99999'),
+		}, {
+			credentials: { url: 'http://user:pass@Proxy.Example.com:8080/', result: 'PROXY proxy.example.com:8080' },
+			defaultHttpPort: { url: 'http://proxy.example.com', result: 'PROXY proxy.example.com:80' },
+			defaultHttpsPort: { url: 'https://proxy.example.com/path?query#fragment', result: 'HTTPS proxy.example.com:443' },
+			ipv6: { url: 'http://[::1]:3128', result: 'PROXY [::1]:3128' },
+			socks5: { url: 'socks://user@socks.example.com', result: 'SOCKS5 socks.example.com:1080' },
+			socks4: { url: 'socks4a://socks.example.com:1081', result: 'SOCKS socks.example.com:1081' },
+			malformed: { url: 'http://proxy.example.com:99999', result: 'DIRECT' },
+		});
+	});
+
+	it('formats proxies from environment variables as Electron does in the result, but keeps system results', async function () {
+		const env = createProxyResolver(createParams({
+			env: { https_proxy: 'https://jane%40corp.example.com:p@ss@envproxy.example.com:3128/' },
+		}));
+		const system = createProxyResolver(createParams({
+			resolveProxy: async () => 'PROXY user@proxy1.example.com:8080; HTTPS proxy2.example.com:8443; DIRECT',
+		}));
+		assert.deepStrictEqual([
+			await env.resolveProxyByURL('https://example.com/'),
+			await system.resolveProxyByURL('https://example.com/'),
+		], [
+			{ url: 'https://jane%40corp.example.com:p@ss@envproxy.example.com:3128/', type: 'HTTPS', source: 'env', result: 'HTTPS envproxy.example.com:3128' },
+			{ url: 'http://user@proxy1.example.com:8080', type: 'PROXY', source: 'system', result: 'PROXY user@proxy1.example.com:8080; HTTPS proxy2.example.com:8443; DIRECT' },
+		]);
+	});
 	it('reports remote when host proxy resolution is disabled', async function () {
 		const { resolveProxyByURL } = createProxyResolver(createParams({
 			isUseHostProxyEnabled: () => false,
 		}));
 		assert.deepStrictEqual(await resolveProxyByURL('https://example.com/'), {
-			url: undefined, type: 'DIRECT', source: 'remote',
+			url: undefined, type: 'DIRECT', source: 'remote', result: 'DIRECT',
 		});
 	});
 });
