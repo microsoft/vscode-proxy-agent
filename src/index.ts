@@ -207,6 +207,12 @@ export interface ResolvedProxyInfo {
 	type: ProxyResolveType;
 	/** Which configuration determined the result. */
 	source: ProxyResolveSource;
+	/**
+	 * The full PAC-style result, such as `PROXY proxy1:8080; PROXY proxy2:8080; DIRECT`, of which `url` and `type`
+	 * describe the first entry they recognize. Unlike `url`, it keeps the fallback entries. `undefined` when the system
+	 * resolver returned nothing. A proxy from the `http.proxy` setting or an environment variable keeps its credentials.
+	 */
+	result: string | undefined;
 }
 
 export function createProxyResolver(params: ProxyAgentParams) {
@@ -412,7 +418,7 @@ export function createProxyResolver(params: ProxyAgentParams) {
 			useProxySettings(url, undefined, '', (result, source) => {
 				try {
 					const { url: proxyURL, type } = getProxyURLFromResolverResult(result);
-					resolve({ url: proxyURL, type, source });
+					resolve({ url: proxyURL, type, source, result });
 				} catch (err) {
 					reject(err);
 				}
