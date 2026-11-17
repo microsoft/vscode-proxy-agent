@@ -1,4 +1,6 @@
 import * as assert from 'assert';
+import { spawnSync } from 'child_process';
+import * as path from 'path';
 import { createProxyResolver, getOrLoadAdditionalCertificates, loadSystemCertificates, Log, LogLevel, ProxyAgentParams, resetCaches } from '../../src';
 
 function createParams(overrides: Partial<ProxyAgentParams>): ProxyAgentParams {
@@ -68,6 +70,50 @@ describe('resolveProxyByURL', function () {
 		assert.deepStrictEqual(await resolveProxyByURL('http://localhost:3000/'), {
 			url: undefined, type: 'DIRECT', source: 'localhost', result: 'DIRECT',
 		});
+	});
+
+	it('reports IPv6 loopback addresses as a direct connection', async function () {
+		const { resolveProxyByURL } = createProxyResolver(createParams({
+			getProxyURL: () => 'http://proxy.example.com:8080',
+		}));
+		const direct = { url: undefined, type: 'DIRECT', source: 'localhost', result: 'DIRECT' };
+		assert.deepStrictEqual([
+			await resolveProxyByURL('http://[::1]:3000/'),
+			await resolveProxyByURL('http://[::ffff:127.0.0.1]:3000/'),
+		], [direct, direct]);
+	});
+
+	it('caches system results per scheme, host and port', async function () {
+		const { resolveProxyByURL } = createProxyResolver(createParams({
+			resolveProxy: async url => `PROXY ${new URL(url).port || 'default'}.example.com:8080`,
+		}));
+		assert.deepStrictEqual([
+			(await resolveProxyByURL('https://example.com/a?q#h')).result,
+			(await resolveProxyByURL('https://example.com:8443/a')).result,
+			(await resolveProxyByURL('https://example.com/b')),
+		], [
+			'PROXY default.example.com:8080',
+			'PROXY 8443.example.com:8080',
+			{ url: 'http://default.example.com:8080', type: 'PROXY', source: 'system_cached', result: 'PROXY default.example.com:8080' },
+		]);
+	});
+
+	it('does not emit the url.parse() deprecation warning (DEP0169)', function () {
+		const script = `require('./src').createProxyResolver({ ${[
+			'getProxyURL: () => undefined',
+			'getNoProxyConfig: () => []',
+			'addCertificatesV1: () => false',
+			'loadSystemCertificatesFromNode: () => false',
+			'log: { debug() { }, error() { } }',
+			'isUseHostProxyEnabled: () => true',
+			'resolveProxy: async () => "DIRECT"',
+			'env: {}',
+		].join(', ')} }).resolveProxyByURL('https://example.com/');`;
+		const { status, stderr } = spawnSync(process.execPath, ['--throw-deprecation', '-r', 'ts-node/register', '-e', script], {
+			cwd: path.join(__dirname, '..', '..'),
+			encoding: 'utf8',
+		});
+		assert.deepStrictEqual({ status, stderr }, { status: 0, stderr: '' });
 	});
 
 	it('reports the http.proxy setting source', async function () {
